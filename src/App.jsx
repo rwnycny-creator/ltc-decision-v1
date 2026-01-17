@@ -1,93 +1,29 @@
-import React, { useEffect, useMemo, useState } from "react";
-
-const currency = (n) => {
-  if (!isFinite(n)) return "$0";
-  return n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-};
-const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
-
-function computeFutureValue({ currentAge, startAge, currentPool, annualContribution, contributionYears, netReturn }) {
-  const yearsToStart = Math.max(0, Math.round(startAge - currentAge));
-  let pool = Math.max(0, currentPool);
-  for (let y = 1; y <= yearsToStart; y++) {
-    if (y <= contributionYears) pool += Math.max(0, annualContribution);
-    pool *= 1 + netReturn;
-  }
-  return { poolAtStart: pool, yearsToStart };
-}
-
-function simulateCare({ poolAtStart, annualCost, durationYears, annualContractBenefit, contractBenefitYears }) {
-  let pool = poolAtStart;
-  let forcedSellYear = null;
-  const rows = [];
-
-  for (let year = 1; year <= durationYears; year++) {
-    const contractOffset = year <= contractBenefitYears ? Math.min(annualCost, annualContractBenefit) : 0;
-    const netOutflow = Math.max(0, annualCost - contractOffset);
-
-    const startBal = pool;
-    pool = pool - netOutflow;
-    const endBal = pool;
-
-    if (forcedSellYear == null && endBal < 0) forcedSellYear = year;
-
-    rows.push({ year, annualCost, contractOffset, netOutflow, startBal, endBal });
-  }
-
-  const yearsOfCoverage = forcedSellYear == null ? durationYears : Math.max(0, forcedSellYear - 1);
-  return { rows, forcedSellYear, yearsOfCoverage, endingBalance: pool };
-}
-
-const StepShell = ({ title, subtitle, children }) => (
-  <div className="max-w-3xl mx-auto p-4 md:p-8">
-    <div className="mb-6">
-      <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">{title}</h1>
-      {subtitle ? <p className="text-sm md:text-base text-gray-600 mt-2">{subtitle}</p> : null}
-    </div>
-    <div className="bg-white rounded-2xl shadow-sm border p-4 md:p-6">{children}</div>
-  </div>
-);
-
-const Pill = ({ active, children, onClick }) => (
-  <button
-    onClick={onClick}
-    className={`px-3 py-1.5 rounded-full text-sm border transition ${
-      active ? "bg-black text-white border-black" : "bg-white hover:bg-gray-50"
-    }`}
-  >
-    {children}
-  </button>
-);
-
-const Field = ({ label, hint, children }) => (
-  <div className="space-y-2">
-    <div>
-      <div className="text-sm font-medium">{label}</div>
-      {hint ? <div className="text-xs text-gray-500 mt-1">{hint}</div> : null}
-    </div>
-    {children}
-  </div>
-);
+/* === src/App.jsx (fixed) === */
+import React, { useMemo, useState, useEffect } from "react";
 
 /**
- * NumberInput（统一版）
- * - 输入时：只更新内部 text，不打断用户输入（允许空、部分数字）
- * - 失焦时：把 text -> number，clamp 后回传给父组件，并回写规范化值
- * - 不再强行限制 9 位；需要限制位数的话用 max 控制即可
+ * 简单 clamp
  */
-function NumberInput({
+const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
+
+/**
+ * 统一输入组件：允许用户“连续输入”，只在 blur 时把文本 -> 数字并 clamp
+ * 解决：金额/年份等输入时被立刻 clamp 导致无法输入完整数字的问题
+ */
+const NumberInput = ({
   value,
-  onChange, // 回传 number 或 undefined
-  min = -Infinity,
-  max = Infinity,
+  onChange,
+  min = 0,
+  max = 999999999,
+  step,
   placeholder = "",
   className = "",
-}) {
-  const [text, setText] = useState(value === undefined || value === null ? "" : String(value));
+}) => {
+  const [text, setText] = React.useState(value ?? "");
 
-  // 外部 value 变化时，同步到输入框（比如点击“回退/重算”时）
-  useEffect(() => {
-    setText(value === undefined || value === null ? "" : String(value));
+  // 外部 value 变化时，同步回输入框显示（例如从别处 reset）
+  React.useEffect(() => {
+    setText(value ?? "");
   }, [value]);
 
   return (
@@ -97,30 +33,27 @@ function NumberInput({
       pattern="[0-9]*"
       placeholder={placeholder}
       className={`w-full rounded-xl border px-3 py-2 text-base ${className}`}
-      value={text}
+      value={String(text)}
       onChange={(e) => {
-        // 只保留数字（允许用户输入很长的金额）
+        // 只允许数字；允许用户处于“正在输入中”的状态（空、部分数字）
         const next = e.target.value.replace(/\D/g, "");
         setText(next);
       }}
       onBlur={() => {
-        const trimmed = String(text).trim();
-        if (trimmed === "") {
-          onChange?.(undefined);
+        // 离开输入框时，把 text -> 数字并 clamp
+        if (String(text).trim() === "") {
+          // 这里选择：空值不更新（保持原 value），也可以改成 onChange?.(0)
           return;
         }
-        const n = Number(trimmed);
-        if (!Number.isFinite(n)) {
-          onChange?.(undefined);
-          return;
-        }
-        const clamped = Math.min(max, Math.max(min, n));
+        const n = Number(text);
+        if (!Number.isFinite(n)) return;
+        const clamped = clamp(n, min, max);
         onChange?.(clamped);
-        setText(String(clamped));
+        setText(String(clamped)); // 回写为规范化后的值
       }}
     />
   );
-}
+};
 
 const Slider = ({ value, onChange, min = 0, max = 100, step = 1 }) => (
   <input
@@ -134,9 +67,31 @@ const Slider = ({ value, onChange, min = 0, max = 100, step = 1 }) => (
   />
 );
 
+const StepShell = ({ title, subtitle, children }) => (
+  <div className="max-w-3xl mx-auto p-4 md:p-8">
+    <div className="mb-6">
+      {/* 标题字号稍微小一些（更接近“原来的一半观感”） */}
+      <h1 className="text-xl md:text-2xl font-semibold tracking-tight">{title}</h1>
+      <p className="text-sm text-gray-600 mt-2 leading-relaxed">{subtitle}</p>
+    </div>
+    <div className="bg-white rounded-3xl shadow p-6">{children}</div>
+  </div>
+);
+
+const Field = ({ label, hint, children }) => (
+  <div className="space-y-2">
+    <div>
+      <div className="text-sm font-medium text-gray-900">{label}</div>
+      {hint ? <div className="text-xs text-gray-500 mt-1">{hint}</div> : null}
+    </div>
+    {children}
+  </div>
+);
+
 export default function App() {
   const [step, setStep] = useState(1);
 
+  // Screen 1
   const choices = [
     "在市场低点被迫卖资产",
     "被迫卖掉房子或核心资产",
@@ -147,119 +102,112 @@ export default function App() {
   ];
   const [valueAnchor, setValueAnchor] = useState([]);
 
-  // ===== Screen2：出生年份输入（4位）+ 实时年龄 =====
+  // Screen 2: birth year -> auto age
   const nowYear = new Date().getFullYear();
-
   const [birthYearText, setBirthYearText] = useState("");
-  const birthYearNum = Number.parseInt(birthYearText, 10);
-  const birthYearValid =
-    birthYearText.length === 4 && Number.isFinite(birthYearNum) && birthYearNum >= 1900 && birthYearNum <= nowYear;
 
-  const liveAge =
-  birthYearText.length === 4 &&
-  Number.isFinite(birthYearNum) &&
-  birthYearNum >= 1900 &&
-  birthYearNum <= nowYear
-    ? nowYear - birthYearNum
-    : null;
+  const birthYearNum = useMemo(() => Number(birthYearText), [birthYearText]);
 
-const currentAge = liveAge ?? 0;
+  const currentAge = useMemo(() => {
+    if (birthYearNum >= 1900 && birthYearNum <= nowYear) return nowYear - birthYearNum;
+    return 0;
+  }, [birthYearNum, nowYear]);
 
   const [startAge, setStartAge] = useState(85);
-  const [annualCost, setAnnualCost] = useState(300000);
-  const [durationYears, setDurationYears] = useState(5);
 
+  // 若输入了出生年，确保“情景起点年龄”不小于当前年龄
+  useEffect(() => {
+    if (currentAge > 0 && startAge < currentAge) {
+      setStartAge(currentAge);
+    }
+  }, [currentAge, startAge]);
+
+  const [durationYears, setDurationYears] = useState(5);
+  const [annualCost, setAnnualCost] = useState(300000);
+
+  // Screen 3
   const [currentPool, setCurrentPool] = useState(0);
   const [annualContribution, setAnnualContribution] = useState(100000);
   const [contributionYears, setContributionYears] = useState(10);
   const [netReturnChoice, setNetReturnChoice] = useState("3.0");
 
+  // Contract
   const [hasContract, setHasContract] = useState(false);
   const [annualContractBenefit, setAnnualContractBenefit] = useState(138000);
   const [contractBenefitYears, setContractBenefitYears] = useState(6);
 
   const [techBufferPct, setTechBufferPct] = useState(18);
 
+  // Strategy toggles
   const [planBOn, setPlanBOn] = useState(false);
   const [planCOn, setPlanCOn] = useState(true);
 
+  // computed
   const netReturn = useMemo(() => clamp(Number(netReturnChoice) / 100, 0, 0.08), [netReturnChoice]);
 
-  const fv = useMemo(
-    () =>
-      computeFutureValue({
-        currentAge,
-        startAge,
-        currentPool,
-        annualContribution,
-        contributionYears,
-        netReturn,
-      }),
-    [currentAge, startAge, currentPool, annualContribution, contributionYears, netReturn]
-  );
+  // ==== Simple FV calc (toy) ====
+  const computeFutureValue = ({ pv = 0, pmt = 0, years = 0, r = 0 }) => {
+    // FV = pv*(1+r)^n + pmt*(((1+r)^n -1)/r)
+    const n = years;
+    const growth = Math.pow(1 + r, n);
+    if (r === 0) return pv + pmt * n;
+    return pv * growth + pmt * ((growth - 1) / r);
+  };
 
-  const scenarioDefs = useMemo(() => {
-    const base = { key: "A", name: "情景 A：基准最坏", annualCost, durationYears, note: "不使用任何技术降本假设。" };
-
-    const bReduction = planCOn ? clamp(techBufferPct / 100, 0.1, 0.3) : 0;
-    const b = {
-      key: "B",
-      name: "情景 B：技术改善",
-      annualCost: Math.round(annualCost * (1 - bReduction)),
-      durationYears,
-      note: planCOn ? `成本按技术改善下修约 ${(bReduction * 100).toFixed(0)}%。` : "未启用技术缓冲。",
-    };
-
-    const c = {
-      key: "C",
-      name: "情景 C：短期高强度",
-      annualCost: Math.round(annualCost * 1.25),
-      durationYears: Math.max(2, Math.round(durationYears * 0.6)),
-      note: "更短、更尖峰的现金流冲击（示意）。",
-    };
-
-    return [base, b, c];
-  }, [annualCost, durationYears, planCOn, techBufferPct]);
-
-  const [scenarioKey, setScenarioKey] = useState("A");
-  const activeScenario = scenarioDefs.find((s) => s.key === scenarioKey) || scenarioDefs[0];
-
-  const sim = useMemo(() => {
-    const useContract = hasContract && planBOn;
-    return simulateCare({
-      poolAtStart: fv.poolAtStart,
-      annualCost: activeScenario.annualCost,
-      durationYears: activeScenario.durationYears,
-      annualContractBenefit: useContract ? annualContractBenefit : 0,
-      contractBenefitYears: useContract ? contractBenefitYears : 0,
+  const fv = useMemo(() => {
+    return computeFutureValue({
+      pv: currentPool,
+      pmt: annualContribution,
+      years: contributionYears,
+      r: netReturn,
     });
-  }, [fv.poolAtStart, activeScenario, hasContract, planBOn, annualContractBenefit, contractBenefitYears]);
+  }, [currentPool, annualContribution, contributionYears, netReturn]);
 
-  const canNext = useMemo(() => {
-    if (step === 1) return valueAnchor.length >= 1 && valueAnchor.length <= 3;
-    if (step === 2) return currentAge > 0 && startAge >= currentAge && durationYears >= 1 && annualCost > 0;
-    if (step === 3) return currentPool >= 0 && annualContribution >= 0 && contributionYears >= 0;
-    return true;
-  }, [step, valueAnchor.length, startAge, currentAge, durationYears, annualCost, currentPool, annualContribution, contributionYears]);
+  const stressCostTotal = useMemo(() => {
+    // two people cost in scenario years
+    const people = 2;
+    return annualCost * people * durationYears;
+  }, [annualCost, durationYears]);
 
+  const contractOffsetTotal = useMemo(() => {
+    if (!hasContract) return 0;
+    return annualContractBenefit * contractBenefitYears;
+  }, [hasContract, annualContractBenefit, contractBenefitYears]);
+
+  const bufferMultiplier = useMemo(() => 1 + techBufferPct / 100, [techBufferPct]);
+
+  const requiredPool = useMemo(() => {
+    // rough: scenario cost - contract offsets, with buffer
+    const base = Math.max(0, stressCostTotal - contractOffsetTotal);
+    return base * bufferMultiplier;
+  }, [stressCostTotal, contractOffsetTotal, bufferMultiplier]);
+
+  const gap = useMemo(() => Math.max(0, requiredPool - fv), [requiredPool, fv]);
+
+  // ==== Navigation ====
   const Nav = () => (
-    <div className="flex items-center justify-between mt-6">
+    <div className="flex items-center justify-between mt-8">
       <button
-        className="px-4 py-2 rounded-xl border hover:bg-gray-50 disabled:opacity-40"
-        disabled={step === 1}
+        className="rounded-xl border px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-40"
         onClick={() => setStep((s) => Math.max(1, s - 1))}
+        disabled={step === 1}
       >
-        返回
+        上一步
       </button>
+      <div className="text-xs text-gray-500">
+        Step {step} / 6
+      </div>
       <button
-        className="px-4 py-2 rounded-xl bg-black text-white hover:opacity-90 disabled:opacity-40"
-        disabled={!canNext || step === 6}
+        className="rounded-xl bg-black text-white px-4 py-2 text-sm hover:opacity-90 disabled:opacity-40"
         onClick={() => setStep((s) => Math.min(6, s + 1))}
+        disabled={step === 6}
       >
-        {step === 3 ? "查看情景结果" : step === 5 ? "生成我的蓝图" : "下一步"}
+        下一步
       </button>
     </div>
   );
+
+  // ===================== SCREENS =====================
 
   const Screen1 = () => (
     <StepShell
@@ -272,9 +220,9 @@ const currentAge = liveAge ?? 0;
           return (
             <button
               key={c}
-              className={`text-left rounded-2xl border p-4 transition hover:bg-gray-50
-                ${active ? "border-black bg-gray-50 ring-2 ring-black/10" : "border-gray-200"}
-              `}
+              className={`text-left rounded-2xl border p-4 hover:bg-gray-50 transition ${
+                active ? "border-black bg-gray-50" : ""
+              }`}
               onClick={() => {
                 setValueAnchor((prev) => {
                   if (prev.includes(c)) return prev.filter((x) => x !== c);
@@ -286,9 +234,11 @@ const currentAge = liveAge ?? 0;
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-medium">{c}</div>
-                  <div className="text-xs text-gray-500 mt-1">{active ? "✅ 已选择（再点可取消）" : "点击选择"}</div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {active ? "已选择（再点可取消）" : "点击选择"}
+                  </div>
                 </div>
-                <div className="text-lg leading-none">{active ? "✅" : ""}</div>
+                <div className="text-sm">{active ? "✓" : ""}</div>
               </div>
             </button>
           );
@@ -300,9 +250,12 @@ const currentAge = liveAge ?? 0;
   );
 
   const Screen2 = () => (
-    <StepShell title="建立你的压力测试基准" subtitle="我们不预测概率，只测试后果。请设定一个你希望一定能扛住的情景。">
+    <StepShell
+      title="建立你的压力测试基准"
+      subtitle="我们不预测概率，只测试后果。请设定一个你希望一定能扛住的情景。"
+    >
       <div className="grid md:grid-cols-3 gap-5">
-        <Field label="出生年份（YYYY）" hint="用于自动计算当前年龄（实时）。">
+        <Field label="出生年份（YYYY）" hint="用于自动计算当前年龄（V1.0.1）。">
           <input
             inputMode="numeric"
             pattern="[0-9]*"
@@ -310,38 +263,40 @@ const currentAge = liveAge ?? 0;
             placeholder="例如：1957"
             value={birthYearText}
             onChange={(e) => {
+              // 只允许数字，且最多 4 位
               const next = e.target.value.replace(/\D/g, "").slice(0, 4);
               setBirthYearText(next);
             }}
+            onBlur={() => {
+              // 离开输入框时再做“规范化”：合法就保留；不合法就清空
+              const n = Number(birthYearText);
+              if (Number.isFinite(n) && n >= 1900 && n <= nowYear) {
+                setBirthYearText(String(n));
+              } else {
+                setBirthYearText("");
+              }
+            }}
           />
           <div className="text-xs text-gray-500 mt-2">
-            自动计算当前年龄: {liveAge !== null ? `${liveAge} 岁` : "（请输入完整 4 位出生年份）"}
+            自动计算当前年龄：{currentAge > 0 ? `${currentAge} 岁` : "（请输入正确出生年份）"}
           </div>
         </Field>
 
-        <Field label="情景起点年龄" hint="默认 85；应 ≥ 当前年龄。">
+        <Field label="情景起点年龄" hint="默认 85；应 ≥ 当前年龄（系统会自动帮你调到不小于当前年龄）。">
           <NumberInput
             value={startAge}
-            onChange={(v) => {
-              if (v === undefined) return;
-              setStartAge(clamp(v, 40, 110));
-            }}
+            onChange={(v) => v !== undefined && setStartAge(v)}
             min={40}
             max={110}
-            placeholder="例如：85"
           />
         </Field>
 
         <Field label="护理持续年限" hint="默认 5 年。">
           <NumberInput
             value={durationYears}
-            onChange={(v) => {
-              if (v === undefined) return;
-              setDurationYears(clamp(v, 1, 20));
-            }}
+            onChange={(v) => v !== undefined && setDurationYears(v)}
             min={1}
             max={20}
-            placeholder="例如：5"
           />
         </Field>
       </div>
@@ -350,16 +305,12 @@ const currentAge = liveAge ?? 0;
         <Field label="年度 LTC 成本（每人）" hint="工程假设：用于压力测试。">
           <NumberInput
             value={annualCost}
-            onChange={(v) => {
-              if (v === undefined) return;
-              setAnnualCost(clamp(v, 50000, 600000));
-            }}
+            onChange={(v) => v !== undefined && setAnnualCost(v)}
             min={50000}
             max={600000}
-            placeholder="例如：300000"
+            step={1000}
           />
-          <div className="text-xs text-gray-500 mt-2">当前输入：{currency(annualCost)}</div>
-          <div className="text-xs text-gray-500 mt-1">提示：这不是预测；你可以随时回来调整。</div>
+          <div className="text-xs text-gray-500 mt-2">提示：这不是预测；你可以随时回来调整。</div>
         </Field>
       </div>
 
@@ -370,64 +321,61 @@ const currentAge = liveAge ?? 0;
   const Screen3 = () => (
     <StepShell title="哪些钱，真的能在压力时刻用上？" subtitle="账面资产 ≠ 可动用现金。我们只计算你愿意、也能够动用的部分。">
       <div className="grid md:grid-cols-2 gap-5">
-        <Field label="当前可动用 LTC 现金池" hint="你愿意用于 LTC 的现金/短债/可迅速变现资产。">
+        <Field label="可动用资金池（现有）" hint="你愿意用于 LTC 的现有可动用资产。">
           <NumberInput
             value={currentPool}
-            onChange={(v) => {
-              if (v === undefined) return;
-              setCurrentPool(clamp(v, 0, 10000000));
-            }}
+            onChange={(v) => v !== undefined && setCurrentPool(clamp(v, 0, 10000000))}
             min={0}
-            max={10000000}
-            placeholder="例如：0"
+            step={1000}
           />
-          <div className="text-xs text-gray-500 mt-2">当前输入：{currency(currentPool)}</div>
         </Field>
 
-        <div className="space-y-5">
-          <Field label="计划每年投入金额" hint="例如每年投入 $100k。">
-            <NumberInput
-              value={annualContribution}
-              onChange={(v) => {
-                if (v === undefined) return;
-                setAnnualContribution(clamp(v, 0, 1000000));
-              }}
-              min={0}
-              max={1000000}
-              placeholder="例如：100000"
-            />
-          </Field>
+        <Field label="每年追加（可动用）" hint="例如每年存入/转入用于 LTC 的金额。">
+          <NumberInput
+            value={annualContribution}
+            onChange={(v) => v !== undefined && setAnnualContribution(clamp(v, 0, 1000000))}
+            min={0}
+            step={1000}
+          />
+        </Field>
 
-          <Field label="计划投入年限" hint="例如 10 年。">
-            <NumberInput
-              value={contributionYears}
-              onChange={(v) => {
-                if (v === undefined) return;
-                setContributionYears(clamp(v, 0, 40));
-              }}
-              min={0}
-              max={40}
-              placeholder="例如：10"
-            />
-          </Field>
-        </div>
-      </div>
+        <Field label="追加年限" hint="例如 10 年。">
+          <NumberInput
+            value={contributionYears}
+            onChange={(v) => v !== undefined && setContributionYears(clamp(v, 0, 40))}
+            min={0}
+            max={40}
+            step={1}
+          />
+        </Field>
 
-      <div className="mt-6 grid md:grid-cols-2 gap-5">
-        <Field label="税后年化假设" hint="V1 只提供三档，避免过度精细。">
-          <div className="flex flex-wrap gap-2">
-            {["2.5", "3.0", "3.5"].map((x) => (
-              <Pill key={x} active={netReturnChoice === x} onClick={() => setNetReturnChoice(x)}>
-                {x}%
-              </Pill>
-            ))}
+        <Field label="净回报假设（年化）" hint="工程假设：0%–8%。">
+          <div className="flex items-center gap-3">
+            <select
+              className="rounded-xl border px-3 py-2 text-base"
+              value={netReturnChoice}
+              onChange={(e) => setNetReturnChoice(e.target.value)}
+            >
+              <option value="0.0">0.0%</option>
+              <option value="1.0">1.0%</option>
+              <option value="2.0">2.0%</option>
+              <option value="3.0">3.0%</option>
+              <option value="4.0">4.0%</option>
+              <option value="5.0">5.0%</option>
+              <option value="6.0">6.0%</option>
+              <option value="7.0">7.0%</option>
+              <option value="8.0">8.0%</option>
+            </select>
+            <div className="text-xs text-gray-500">仅用于压力测试。</div>
           </div>
         </Field>
+      </div>
 
-        <div className="rounded-2xl border p-4 bg-gray-50">
-          <div className="text-sm font-medium">现金池到情景起点（估算）</div>
-          <div className="text-2xl font-semibold mt-2">{currency(fv.poolAtStart)}</div>
-          <div className="text-xs text-gray-500 mt-1">距离起点约 {fv.yearsToStart} 年；按税后 {netReturnChoice}% 假设滚动。</div>
+      <div className="mt-6 rounded-2xl bg-gray-50 p-4">
+        <div className="text-sm font-medium">预计可动用资金（粗略）</div>
+        <div className="text-2xl font-semibold mt-1">${Math.round(fv).toLocaleString()}</div>
+        <div className="text-xs text-gray-500 mt-1">
+          计算：现有资金池 + 每年追加 × 年限 ×（净回报）
         </div>
       </div>
 
@@ -436,180 +384,62 @@ const currentAge = liveAge ?? 0;
   );
 
   const Screen4 = () => (
-    <StepShell title="在压力下，你的结构会在哪里断裂？" subtitle="主视角：Forced-Sell Timeline（现金耗尽/被迫卖资产的时间点）。辅视角：可覆盖年数。">
-      <div className="flex flex-wrap gap-2 mb-4">
-        {scenarioDefs.map((s) => (
-          <Pill key={s.key} active={scenarioKey === s.key} onClick={() => setScenarioKey(s.key)}>
-            {s.key}
-          </Pill>
-        ))}
-      </div>
-
-      <div className="rounded-2xl border p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-sm font-medium">{activeScenario.name}</div>
-            <div className="text-xs text-gray-500 mt-1">{activeScenario.note}</div>
-          </div>
-          <div className="text-right">
-            <div className="text-xs text-gray-500">年度成本</div>
-            <div className="text-sm font-semibold">{currency(activeScenario.annualCost)}</div>
-          </div>
+    <StepShell title="合同/福利能抵多少？" subtitle="如果你有 LTC 相关合同或福利（例如某些合同给付、报销上限等），这里做一个“示意扣减”。">
+      <div className="space-y-5">
+        <div className="flex items-center gap-3">
+          <input type="checkbox" checked={hasContract} onChange={(e) => setHasContract(e.target.checked)} />
+          <div className="text-sm">我有可用于 LTC 的合同/福利（示意）</div>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-4 mt-4">
-          <div className="rounded-2xl border p-4 bg-gray-50">
-            <div className="text-xs text-gray-500">起点现金池</div>
-            <div className="text-lg font-semibold mt-1">{currency(fv.poolAtStart)}</div>
-          </div>
-          <div className="rounded-2xl border p-4 bg-gray-50">
-            <div className="text-xs text-gray-500">可覆盖年数（辅）</div>
-            <div className="text-lg font-semibold mt-1">{sim.yearsOfCoverage} 年</div>
-          </div>
-          <div className="rounded-2xl border p-4 bg-gray-50">
-            <div className="text-xs text-gray-500">被迫卖资产的触发点</div>
-            <div className="text-lg font-semibold mt-1">{sim.forcedSellYear == null ? "未触发" : `护理第 ${sim.forcedSellYear} 年`}</div>
-          </div>
-        </div>
+        {hasContract && (
+          <div className="grid md:grid-cols-2 gap-5">
+            <Field label="年度可抵扣上限（示意）" hint="例如 $138k/年。">
+              <NumberInput
+                value={annualContractBenefit}
+                onChange={(v) => v !== undefined && setAnnualContractBenefit(clamp(v, 0, 400000))}
+                step={1000}
+              />
+            </Field>
 
-        <div className="mt-5">
-          <div className="text-sm font-medium">Forced-Sell Timeline（逐年）</div>
-          <div className="overflow-auto mt-2">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-xs text-gray-500 border-b">
-                  <th className="py-2 text-left">年</th>
-                  <th className="py-2 text-right">成本</th>
-                  <th className="py-2 text-right">合同抵扣</th>
-                  <th className="py-2 text-right">净流出</th>
-                  <th className="py-2 text-right">期末余额</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sim.rows.map((r) => {
-                  const depleted = r.endBal < 0;
-                  return (
-                    <tr key={r.year} className={`border-b ${depleted ? "bg-gray-50" : ""}`}>
-                      <td className="py-2">第 {r.year} 年</td>
-                      <td className="py-2 text-right">{currency(r.annualCost)}</td>
-                      <td className="py-2 text-right">{currency(r.contractOffset)}</td>
-                      <td className="py-2 text-right">{currency(r.netOutflow)}</td>
-                      <td className={`py-2 text-right font-medium ${depleted ? "text-red-600" : ""}`}>{currency(r.endBal)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <Field label="福利年限（示意）" hint="例如 6 年。">
+              <NumberInput
+                value={contractBenefitYears}
+                onChange={(v) => v !== undefined && setContractBenefitYears(clamp(v, 0, 20))}
+                min={0}
+                max={20}
+                step={1}
+              />
+            </Field>
           </div>
-          <div className="text-xs text-gray-500 mt-2">
-            说明：合同工具在 V1 中仅作为“年度上限 × 年限”的抵扣模拟（不含报销摩擦/资格条件）。
-          </div>
-        </div>
+        )}
 
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-          <button className="px-4 py-2 rounded-xl border hover:bg-gray-50" onClick={() => setStep(5)}>
-            调整结构（Plan A/B/C）
-          </button>
-          <div className="text-xs text-gray-500">你的价值锚点：{valueAnchor.length ? valueAnchor.join("、") : "未选择"}</div>
+        <div className="rounded-2xl bg-gray-50 p-4">
+          <div className="text-sm font-medium">合同/福利预计抵扣（示意）</div>
+          <div className="text-2xl font-semibold mt-1">${Math.round(contractOffsetTotal).toLocaleString()}</div>
+          <div className="text-xs text-gray-500 mt-1">注：仅作为模型扣减项示意。</div>
         </div>
       </div>
 
-      <div className="mt-6">
-        <Nav />
-      </div>
+      <Nav />
     </StepShell>
   );
 
   const Screen5 = () => (
-    <StepShell title="如何分工，而不是押注？" subtitle="不是所有风险，都该用同一种工具解决。V1 用开关+参数模拟 Plan B（合同）与 Plan C（技术）。">
-      <div className="grid md:grid-cols-2 gap-5">
-        <div className="rounded-2xl border p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-medium">Plan B：合同兜底（可选）</div>
-              <div className="text-xs text-gray-500 mt-1">启用后，会在护理期按年度上限抵扣（简化）。</div>
+    <StepShell title="技术缓冲（预留）" subtitle="现实会更复杂：通胀、护理升级、家庭决策摩擦等。这里用一个缓冲系数粗略覆盖。">
+      <div className="space-y-5">
+        <Field label="缓冲比例" hint="默认 18%。">
+          <div className="flex items-center gap-4">
+            <div className="w-48">
+              <Slider value={techBufferPct} onChange={setTechBufferPct} min={0} max={40} step={1} />
             </div>
-            <button
-              className={`px-3 py-1.5 rounded-full text-sm border ${planBOn ? "bg-black text-white border-black" : ""}`}
-              onClick={() => setPlanBOn((v) => !v)}
-            >
-              {planBOn ? "已启用" : "未启用"}
-            </button>
+            <div className="text-sm font-medium">{techBufferPct}%</div>
           </div>
+        </Field>
 
-          <div className="mt-4">
-            <div className="flex items-center gap-2">
-              <input type="checkbox" checked={hasContract} onChange={(e) => setHasContract(e.target.checked)} />
-              <span className="text-sm">我确实已有某种合同型兜底工具</span>
-            </div>
-            <div className="text-xs text-gray-500 mt-1">V1 只问“有没有”，不问公司名与条款细节。</div>
-          </div>
-
-          <div className={`mt-4 space-y-4 ${hasContract ? "" : "opacity-40 pointer-events-none"}`}>
-            <Field label="年度可抵扣上限（示意）" hint="例如 $138k/年。">
-              <NumberInput
-                value={annualContractBenefit}
-                onChange={(v) => {
-                  if (v === undefined) return;
-                  setAnnualContractBenefit(clamp(v, 0, 400000));
-                }}
-                min={0}
-                max={400000}
-                placeholder="例如：138000"
-              />
-            </Field>
-            <Field label="可抵扣年限（示意）" hint="例如 6 年。">
-              <NumberInput
-                value={contractBenefitYears}
-                onChange={(v) => {
-                  if (v === undefined) return;
-                  setContractBenefitYears(clamp(v, 0, 20));
-                }}
-                min={0}
-                max={20}
-                placeholder="例如：6"
-              />
-            </Field>
-          </div>
+        <div className="rounded-2xl bg-gray-50 p-4">
+          <div className="text-sm font-medium">缓冲倍数</div>
+          <div className="text-2xl font-semibold mt-1">{bufferMultiplier.toFixed(2)}x</div>
         </div>
-
-        <div className="rounded-2xl border p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-medium">Plan C：技术 / 自动化缓冲</div>
-              <div className="text-xs text-gray-500 mt-1">用于情景 B 的成本下修（V1 简化）。</div>
-            </div>
-            <button
-              className={`px-3 py-1.5 rounded-full text-sm border ${planCOn ? "bg-black text-white border-black" : ""}`}
-              onClick={() => setPlanCOn((v) => !v)}
-            >
-              {planCOn ? "已启用" : "未启用"}
-            </button>
-          </div>
-
-          <div className={`mt-4 ${planCOn ? "" : "opacity-40 pointer-events-none"}`}>
-            <Field label="技术改善幅度（用于情景 B）" hint="建议 15–20%（V1 限定在 10–30%）。">
-              <div className="flex items-center gap-3">
-                <Slider value={techBufferPct} onChange={(v) => setTechBufferPct(clamp(v, 10, 30))} min={10} max={30} step={1} />
-                <div className="w-14 text-right text-sm font-medium">{techBufferPct}%</div>
-              </div>
-            </Field>
-          </div>
-
-          <div className="mt-4 rounded-2xl border p-4 bg-gray-50">
-            <div className="text-xs text-gray-500">即时效果（情景 B 年成本）</div>
-            <div className="text-lg font-semibold mt-1">{currency(Math.round(annualCost * (1 - (planCOn ? techBufferPct / 100 : 0))))}</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-5 rounded-2xl border p-4 bg-gray-50">
-        <div className="text-sm font-medium">提示（V1 口径）</div>
-        <ul className="text-sm text-gray-600 list-disc pl-5 mt-2 space-y-1">
-          <li>Plan A（自我理财）是主力：提供最大流动性与全球可用性。</li>
-          <li>Plan B（合同）仅作为缓冲：场景依赖、且存在资格/报销摩擦（V1 未建模）。</li>
-          <li>Plan C（技术）是后置选项：允许改善结果，但不作为最低保障前提。</li>
-        </ul>
       </div>
 
       <Nav />
@@ -617,26 +447,58 @@ const currentAge = liveAge ?? 0;
   );
 
   const Screen6 = () => (
-    <StepShell title="这是你当前版本的 LTC 决策蓝图" subtitle="V1 原型先做可读摘要；PDF 导出可在 V1.1 增加。">
-      <div className="space-y-5">
-        <div className="rounded-2xl border p-4">
-          <div className="text-sm font-medium">你的选择权底线</div>
-          <div className="text-sm text-gray-600 mt-2">{valueAnchor.length ? valueAnchor.join("、") : "（未选择）"}</div>
-        </div>
-
-        <div className="rounded-2xl border p-4 bg-gray-50">
-          <div className="text-sm font-medium">免责声明</div>
-          <div className="text-sm text-gray-600 mt-2">
-            本原型用于决策结构与现金流压力测试的理解，不构成医疗、税务、投资或保险建议。
+    <StepShell title="结果摘要：你是否能扛住？" subtitle="这是一份“压力测试摘要”，不是预测。你可以回到前面任何一页调整参数。">
+      <div className="space-y-4">
+        <div className="grid md:grid-cols-3 gap-4">
+          <div className="rounded-2xl bg-gray-50 p-4">
+            <div className="text-xs text-gray-500">情景总成本（2人）</div>
+            <div className="text-xl font-semibold mt-1">${Math.round(stressCostTotal).toLocaleString()}</div>
+          </div>
+          <div className="rounded-2xl bg-gray-50 p-4">
+            <div className="text-xs text-gray-500">合同/福利抵扣（示意）</div>
+            <div className="text-xl font-semibold mt-1">${Math.round(contractOffsetTotal).toLocaleString()}</div>
+          </div>
+          <div className="rounded-2xl bg-gray-50 p-4">
+            <div className="text-xs text-gray-500">含缓冲后的需求池</div>
+            <div className="text-xl font-semibold mt-1">${Math.round(requiredPool).toLocaleString()}</div>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <button className="px-4 py-2 rounded-xl border hover:bg-gray-50" onClick={() => setStep(4)}>
-            返回结果
-          </button>
-          <button className="px-4 py-2 rounded-xl bg-black text-white hover:opacity-90" onClick={() => setStep(1)}>
-            从头复跑
+        <div className="rounded-2xl border p-5">
+          <div className="text-sm font-medium">可动用资金（估算）</div>
+          <div className="text-2xl font-semibold mt-1">${Math.round(fv).toLocaleString()}</div>
+          <div className="text-xs text-gray-500 mt-2">
+            若你把“可动用资金池/每年追加/年限/净回报”视作可调整的工具，这里会是最敏感的杠杆。
+          </div>
+        </div>
+
+        <div className={`rounded-2xl p-5 ${gap > 0 ? "bg-red-50 border border-red-200" : "bg-green-50 border border-green-200"}`}>
+          <div className="text-sm font-medium">{gap > 0 ? "缺口（需要 Plan B/C）" : "覆盖（压力下仍可选择）"}</div>
+          <div className="text-2xl font-semibold mt-1">${Math.round(gap).toLocaleString()}</div>
+          {gap > 0 ? (
+            <div className="text-xs text-red-700 mt-2">提示：你可以通过提高可动用资金、降低成本假设、增加合同抵扣或提高缓冲策略来缩小缺口。</div>
+          ) : (
+            <div className="text-xs text-green-700 mt-2">提示：你仍可回到前面微调，寻找更稳健的组合。</div>
+          )}
+        </div>
+
+        <div className="rounded-2xl bg-gray-50 p-4">
+          <div className="text-sm font-medium">你在 Screen 1 选择的“最怕失去”</div>
+          <div className="text-xs text-gray-600 mt-2">
+            {valueAnchor.length ? valueAnchor.map((x) => `• ${x}`).join("\n") : "（未选择）"}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <input type="checkbox" checked={planBOn} onChange={(e) => setPlanBOn(e.target.checked)} />
+          <div className="text-sm">Plan B（示意开关）</div>
+          <input type="checkbox" checked={planCOn} onChange={(e) => setPlanCOn(e.target.checked)} className="ml-6" />
+          <div className="text-sm">Plan C（示意开关）</div>
+        </div>
+
+        <div className="flex justify-end">
+          <button className="rounded-xl border px-4 py-2 text-sm hover:bg-gray-50" onClick={() => setStep(1)}>
+            回到第 1 步重新测试
           </button>
         </div>
       </div>
@@ -645,12 +507,17 @@ const currentAge = liveAge ?? 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {step === 1 && <Screen1 />}
-      {step === 2 && <Screen2 />}
-      {step === 3 && <Screen3 />}
-      {step === 4 && <Screen4 />}
-      {step === 5 && <Screen5 />}
-      {step === 6 && <Screen6 />}
+      {/*
+        重要：不要用 <ScreenX /> 这种“组件类型”，因为 ScreenX 函数是在 App() 内部定义的，
+        每次渲染都会生成新的函数引用，React 会把它当成“新组件”并卸载/重挂载，
+        从而导致输入框每输入一个字符就丢焦点（你遇到的“要挪鼠标才能继续输入”就是这个）。
+      */}
+      {step === 1 && Screen1()}
+      {step === 2 && Screen2()}
+      {step === 3 && Screen3()}
+      {step === 4 && Screen4()}
+      {step === 5 && Screen5()}
+      {step === 6 && Screen6()}
     </div>
   );
 }
