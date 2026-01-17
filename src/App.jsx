@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 const currency = (n) => {
   if (!isFinite(n)) return "$0";
@@ -69,20 +69,69 @@ const Field = ({ label, hint, children }) => (
   </div>
 );
 
-const NumberInput = ({ value, onChange, min, max, step = 1 }) => (
+/**
+ * NumberInput（统一版）
+ * - 输入时：只更新内部 text，不打断用户输入（允许空、部分数字）
+ * - 失焦时：把 text -> number，clamp 后回传给父组件，并回写规范化值
+ * - 不再强行限制 9 位；需要限制位数的话用 max 控制即可
+ */
+function NumberInput({
+  value,
+  onChange, // 回传 number 或 undefined
+  min = -Infinity,
+  max = Infinity,
+  placeholder = "",
+  className = "",
+}) {
+  const [text, setText] = useState(value === undefined || value === null ? "" : String(value));
+
+  // 外部 value 变化时，同步到输入框（比如点击“回退/重算”时）
+  useEffect(() => {
+    setText(value === undefined || value === null ? "" : String(value));
+  }, [value]);
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      pattern="[0-9]*"
+      placeholder={placeholder}
+      className={`w-full rounded-xl border px-3 py-2 text-base ${className}`}
+      value={text}
+      onChange={(e) => {
+        // 只保留数字（允许用户输入很长的金额）
+        const next = e.target.value.replace(/\D/g, "");
+        setText(next);
+      }}
+      onBlur={() => {
+        const trimmed = String(text).trim();
+        if (trimmed === "") {
+          onChange?.(undefined);
+          return;
+        }
+        const n = Number(trimmed);
+        if (!Number.isFinite(n)) {
+          onChange?.(undefined);
+          return;
+        }
+        const clamped = Math.min(max, Math.max(min, n));
+        onChange?.(clamped);
+        setText(String(clamped));
+      }}
+    />
+  );
+}
+
+const Slider = ({ value, onChange, min = 0, max = 100, step = 1 }) => (
   <input
-    type="number"
-    className="w-full rounded-xl border px-3 py-2 text-sm"
+    type="range"
+    className="w-full"
     value={value}
     min={min}
     max={max}
     step={step}
     onChange={(e) => onChange(Number(e.target.value))}
   />
-);
-
-const Slider = ({ value, onChange, min = 0, max = 100, step = 1 }) => (
-  <input type="range" className="w-full" value={value} min={min} max={max} step={step} onChange={(e) => onChange(Number(e.target.value))} />
 );
 
 export default function App() {
@@ -98,16 +147,24 @@ export default function App() {
   ];
   const [valueAnchor, setValueAnchor] = useState([]);
 
-  // V1.0.1: birth year -> auto age
-const nowYear = new Date().getFullYear();
-const [birthYear, setBirthYear] = useState(1957);
+  // ===== Screen2：出生年份输入（4位）+ 实时年龄 =====
+  const nowYear = new Date().getFullYear();
 
-// Approx age: does not account for birthday month/day (good enough for V1)
-const currentAge = useMemo(() => {
-  const y = Number(birthYear);
-  if (!y || y < 1900 || y > nowYear) return 0;
-  return nowYear - y;
-}, [birthYear, nowYear]);
+  const [birthYearText, setBirthYearText] = useState("");
+  const birthYearNum = Number.parseInt(birthYearText, 10);
+  const birthYearValid =
+    birthYearText.length === 4 && Number.isFinite(birthYearNum) && birthYearNum >= 1900 && birthYearNum <= nowYear;
+
+  const liveAge =
+  birthYearText.length === 4 &&
+  Number.isFinite(birthYearNum) &&
+  birthYearNum >= 1900 &&
+  birthYearNum <= nowYear
+    ? nowYear - birthYearNum
+    : null;
+
+const currentAge = liveAge ?? 0;
+
   const [startAge, setStartAge] = useState(85);
   const [annualCost, setAnnualCost] = useState(300000);
   const [durationYears, setDurationYears] = useState(5);
@@ -215,7 +272,9 @@ const currentAge = useMemo(() => {
           return (
             <button
               key={c}
-              className={`text-left rounded-2xl border p-4 hover:bg-gray-50 transition ${active ? "border-black bg-gray-50" : ""}`}
+              className={`text-left rounded-2xl border p-4 transition hover:bg-gray-50
+                ${active ? "border-black bg-gray-50 ring-2 ring-black/10" : "border-gray-200"}
+              `}
               onClick={() => {
                 setValueAnchor((prev) => {
                   if (prev.includes(c)) return prev.filter((x) => x !== c);
@@ -224,8 +283,13 @@ const currentAge = useMemo(() => {
                 });
               }}
             >
-              <div className="text-sm font-medium">{c}</div>
-              <div className="text-xs text-gray-500 mt-1">{active ? "已选择" : "点击选择"}</div>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm font-medium">{c}</div>
+                  <div className="text-xs text-gray-500 mt-1">{active ? "✅ 已选择（再点可取消）" : "点击选择"}</div>
+                </div>
+                <div className="text-lg leading-none">{active ? "✅" : ""}</div>
+              </div>
             </button>
           );
         })}
@@ -238,30 +302,64 @@ const currentAge = useMemo(() => {
   const Screen2 = () => (
     <StepShell title="建立你的压力测试基准" subtitle="我们不预测概率，只测试后果。请设定一个你希望一定能扛住的情景。">
       <div className="grid md:grid-cols-3 gap-5">
-        <Field label="出生年份（YYYY）" hint="用于自动计算当前年龄（V1.0.1）。">
-  <NumberInput
-    value={birthYear}
-    onChange={(v) => setBirthYear(clamp(v, 1900, nowYear))}
-    min={1900}
-    max={nowYear}
-    step={1}
-  />
-  <div className="text-xs text-gray-500 mt-2">
-    自动计算当前年龄：{currentAge > 0 ? `${currentAge} 岁` : "（请输入正确出生年份）"}
-  </div>
-</Field>
-        <Field label="情景起点年龄" hint="默认 85；应 ≥ 当前年龄。">
-          <NumberInput value={startAge} onChange={(v) => setStartAge(clamp(v, 40, 110))} min={40} max={110} />
+        <Field label="出生年份（YYYY）" hint="用于自动计算当前年龄（实时）。">
+          <input
+            inputMode="numeric"
+            pattern="[0-9]*"
+            className="w-full rounded-xl border px-3 py-2 text-base"
+            placeholder="例如：1957"
+            value={birthYearText}
+            onChange={(e) => {
+              const next = e.target.value.replace(/\D/g, "").slice(0, 4);
+              setBirthYearText(next);
+            }}
+          />
+          <div className="text-xs text-gray-500 mt-2">
+            自动计算当前年龄: {liveAge !== null ? `${liveAge} 岁` : "（请输入完整 4 位出生年份）"}
+          </div>
         </Field>
+
+        <Field label="情景起点年龄" hint="默认 85；应 ≥ 当前年龄。">
+          <NumberInput
+            value={startAge}
+            onChange={(v) => {
+              if (v === undefined) return;
+              setStartAge(clamp(v, 40, 110));
+            }}
+            min={40}
+            max={110}
+            placeholder="例如：85"
+          />
+        </Field>
+
         <Field label="护理持续年限" hint="默认 5 年。">
-          <NumberInput value={durationYears} onChange={(v) => setDurationYears(clamp(v, 1, 20))} min={1} max={20} />
+          <NumberInput
+            value={durationYears}
+            onChange={(v) => {
+              if (v === undefined) return;
+              setDurationYears(clamp(v, 1, 20));
+            }}
+            min={1}
+            max={20}
+            placeholder="例如：5"
+          />
         </Field>
       </div>
 
       <div className="mt-5">
         <Field label="年度 LTC 成本（每人）" hint="工程假设：用于压力测试。">
-          <NumberInput value={annualCost} onChange={(v) => setAnnualCost(clamp(v, 50000, 600000))} min={50000} max={600000} step={1000} />
-          <div className="text-xs text-gray-500 mt-2">提示：这不是预测；你可以随时回来调整。</div>
+          <NumberInput
+            value={annualCost}
+            onChange={(v) => {
+              if (v === undefined) return;
+              setAnnualCost(clamp(v, 50000, 600000));
+            }}
+            min={50000}
+            max={600000}
+            placeholder="例如：300000"
+          />
+          <div className="text-xs text-gray-500 mt-2">当前输入：{currency(annualCost)}</div>
+          <div className="text-xs text-gray-500 mt-1">提示：这不是预测；你可以随时回来调整。</div>
         </Field>
       </div>
 
@@ -273,16 +371,44 @@ const currentAge = useMemo(() => {
     <StepShell title="哪些钱，真的能在压力时刻用上？" subtitle="账面资产 ≠ 可动用现金。我们只计算你愿意、也能够动用的部分。">
       <div className="grid md:grid-cols-2 gap-5">
         <Field label="当前可动用 LTC 现金池" hint="你愿意用于 LTC 的现金/短债/可迅速变现资产。">
-          <NumberInput value={currentPool} onChange={(v) => setCurrentPool(clamp(v, 0, 10000000))} min={0} step={1000} />
+          <NumberInput
+            value={currentPool}
+            onChange={(v) => {
+              if (v === undefined) return;
+              setCurrentPool(clamp(v, 0, 10000000));
+            }}
+            min={0}
+            max={10000000}
+            placeholder="例如：0"
+          />
           <div className="text-xs text-gray-500 mt-2">当前输入：{currency(currentPool)}</div>
         </Field>
 
         <div className="space-y-5">
           <Field label="计划每年投入金额" hint="例如每年投入 $100k。">
-            <NumberInput value={annualContribution} onChange={(v) => setAnnualContribution(clamp(v, 0, 1000000))} min={0} step={1000} />
+            <NumberInput
+              value={annualContribution}
+              onChange={(v) => {
+                if (v === undefined) return;
+                setAnnualContribution(clamp(v, 0, 1000000));
+              }}
+              min={0}
+              max={1000000}
+              placeholder="例如：100000"
+            />
           </Field>
+
           <Field label="计划投入年限" hint="例如 10 年。">
-            <NumberInput value={contributionYears} onChange={(v) => setContributionYears(clamp(v, 0, 40))} min={0} max={40} />
+            <NumberInput
+              value={contributionYears}
+              onChange={(v) => {
+                if (v === undefined) return;
+                setContributionYears(clamp(v, 0, 40));
+              }}
+              min={0}
+              max={40}
+              placeholder="例如：10"
+            />
           </Field>
         </div>
       </div>
@@ -421,10 +547,28 @@ const currentAge = useMemo(() => {
 
           <div className={`mt-4 space-y-4 ${hasContract ? "" : "opacity-40 pointer-events-none"}`}>
             <Field label="年度可抵扣上限（示意）" hint="例如 $138k/年。">
-              <NumberInput value={annualContractBenefit} onChange={(v) => setAnnualContractBenefit(clamp(v, 0, 400000))} step={1000} />
+              <NumberInput
+                value={annualContractBenefit}
+                onChange={(v) => {
+                  if (v === undefined) return;
+                  setAnnualContractBenefit(clamp(v, 0, 400000));
+                }}
+                min={0}
+                max={400000}
+                placeholder="例如：138000"
+              />
             </Field>
             <Field label="可抵扣年限（示意）" hint="例如 6 年。">
-              <NumberInput value={contractBenefitYears} onChange={(v) => setContractBenefitYears(clamp(v, 0, 20))} min={0} max={20} />
+              <NumberInput
+                value={contractBenefitYears}
+                onChange={(v) => {
+                  if (v === undefined) return;
+                  setContractBenefitYears(clamp(v, 0, 20));
+                }}
+                min={0}
+                max={20}
+                placeholder="例如：6"
+              />
             </Field>
           </div>
         </div>
