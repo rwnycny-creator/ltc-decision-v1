@@ -141,25 +141,60 @@ const Nav = ({ step, setStep, canNext = true }) => (
   </div>
 );
 
-// ✅ Screen6 棒图行（固定放在 App 外，避免组件被重建）
-const BarRow = ({ label, contract, oop, remain, maxValue }) => {
-  const toPct = (x) => `${(100 * (x / maxValue)).toFixed(2)}%`;
+// ✅ Screen6 棒图行（稳健版：防 NaN/0/负数，自动钳制到 0~100%）
+const BarRow = ({ label, contract = 0, oop = 0, remain = 0, maxValue = 0 }) => {
+  const safeNum = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : 0;
+  };
+
+  const c = Math.max(0) * 0 + Math.max(0, safeNum(contract)); // 防止 -0 等怪值
+  const o = Math.max(0, safeNum(oop));
+  const r = Math.max(0, safeNum(remain));
+
+  const max = Math.max(1, safeNum(maxValue)); // 关键：至少为 1，避免除 0
+
+  const pct = (x) => {
+    const p = (100 * x) / max;
+    if (!Number.isFinite(p)) return 0;
+    return Math.max(0, Math.min(100, p));
+  };
+
+  const wC = pct(c);
+  const wO = pct(o);
+  const wR = pct(r);
+
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-xs text-gray-600">
         <div>{label}</div>
         <div className="tabular-nums">
-          合同 {fmtUSD(contract)} · 自付 {fmtUSD(oop)} · 支付后剩余 {fmtUSD(remain)}
+          合同 {fmtUSD(c)} · 自付 {fmtUSD(o)} · 支付后剩余 {fmtUSD(r)}
         </div>
       </div>
+
       <div className="h-4 w-full rounded-full bg-gray-200 overflow-hidden flex">
-        <div className="h-full bg-blue-400" style={{ width: toPct(contract) }} />
-        <div className="h-full bg-red-400" style={{ width: toPct(oop) }} />
-        <div className="h-full bg-green-400" style={{ width: toPct(remain) }} />
+        <div
+          style={{ width: `${wC}%`, backgroundColor: "#60a5fa" }} // blue-400
+          title={`合同 ${wC.toFixed(1)}%`}
+        />
+        <div
+          style={{ width: `${wO}%`, backgroundColor: "#f87171" }} // red-400
+          title={`自付 ${wO.toFixed(1)}%`}
+        />
+        <div
+          style={{ width: `${wR}%`, backgroundColor: "#4ade80" }} // green-400
+          title={`剩余 ${wR.toFixed(1)}%`}
+        />
+      </div>
+
+      <div className="text-[11px] text-gray-500">
+        参考上限：{fmtUSD(max)}（每段宽度已钳制到 0–100%）
       </div>
     </div>
   );
 };
+
 
 /* ======================
    App
@@ -355,7 +390,11 @@ export default function App() {
      timeline：逐年资产 / 支出
   ----------------------- */
   const timeline = useMemo(() => {
-    const years = Math.max(1, ltcHorizonYears);
+    const years = Math.max(1, Number(durationYears) || 0);
+    const years1 = Math.max(1, Number(durationYears) || 0);
+    const years2 = planTwoStage ? Math.max(1, Number(durationYears) || 0) : 0;
+    const totalYears = years1 + years2;
+
     let assets = Number(poolAtStart) || 0;
 
     const rows = [];
