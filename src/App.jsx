@@ -22,9 +22,22 @@ const fmtUSD = (n) => {
 
 // ✅ 标题统一“减半感”：text-lg（比 text-xl 明显更小）
 const StepShell = ({ title, subtitle, children }) => (
-  <div className="max-w-4xl mx-auto px-4 py-8">
-    <h1 className="text-lg md:text-lg font-semibold mb-2">{title}</h1>
-    {subtitle && <div className="text-xs md:text-xs text-gray-600 mb-6">{subtitle}</div>}
+  <div className="max-w-4xl mx-auto px-8 py-12">
+    <div
+      style={{
+        fontSize: "18px",      // 你想再小就改 16px
+        lineHeight: "24px",
+        fontWeight: 600,
+        marginBottom: "8px",
+      }}
+    >
+      {title}
+    </div>
+    {subtitle && (
+      <div style={{ fontSize: "12px", lineHeight: "18px", color: "#4B5563", marginBottom: "20px" }}>
+       {subtitle}
+      </div>
+    )}
     {children}
   </div>
 );
@@ -342,7 +355,7 @@ export default function App() {
      timeline：逐年资产 / 支出
   ----------------------- */
   const timeline = useMemo(() => {
-    const years = Math.max(0, ltcHorizonYears);
+    const years = Math.max(1, ltcHorizonYears);
     let assets = Number(poolAtStart) || 0;
 
     const rows = [];
