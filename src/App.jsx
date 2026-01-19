@@ -770,8 +770,8 @@ export default function App() {
                 key={r.yearIndex}
                 label={`第 ${r.yearIndex} 年`}
                 contract={r.contract}
-                oop={r.oop}
-                remain={Math.max(0, r.startAssets - r.oop)}
+                oop={r.outOfPocket}
+                remain={Math.max(0, r.startAssets - r.outOfPocket)}
                 maxValue={chartMax}
               />
             ))}
