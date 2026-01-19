@@ -22,7 +22,7 @@ const fmtUSD = (n) => {
 
 // ✅ 标题统一“减半感”：text-lg（比 text-xl 明显更小）
 const StepShell = ({ title, subtitle, children }) => (
-  <div className="max-w-4xl mx-auto px-8 py-12">
+  <div className="max-w-4xl mx-auto px-5 sm:px-8 py-10 sm:py-12">
     <div
       style={{
         fontSize: "18px",      // 你想再小就改 16px
