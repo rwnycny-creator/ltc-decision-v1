@@ -173,17 +173,17 @@ const BarRow = ({ label, contract, oop, remain, maxValue }) => {
       <div
         className="w-full"
         style={{
-          height: "14px",
+          height: "22px",
           width: "100%",
           borderRadius: "999px",
-          background: "#e5e7eb",
+          background: "#e2e8f0",
           overflow: "hidden",
         }}
       >
-        <svg viewBox="0 0 100 10" preserveAspectRatio="none" width="100%" height="100%">
-          <rect x="0" y="0" width={w1} height="10" fill="#60a5fa" />
-          <rect x={w1} y="0" width={w2} height="10" fill="#f87171" />
-          <rect x={w1 + w2} y="0" width={w3} height="10" fill="#4ade80" />
+        <svg viewBox="0 0 100 22" preserveAspectRatio="none" width="100%" height="100%">
+          <rect x="0" y="0" width={w1} height="22" fill="#60a5fa" />
+          <rect x={w1} y="0" width={w2} height="22" fill="#f87171" />
+          <rect x={w1 + w2} y="0" width={w3} height="22" fill="#4ade80" />
         </svg>
       </div>
     </div>
