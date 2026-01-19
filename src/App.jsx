@@ -495,7 +495,7 @@ export default function App() {
   const [costGrowthPct, setCostGrowthPct] = useState(3);
 
   // “今天价格”的年度 LTC 成本
-  const [annualCostToday, setAnnualCostToday] = useState(300000);
+  const [annualCostToday, setAnnualCostToday] = useState(120000);
 
   const currentAge = useMemo(() => {
     const y = Number(birthYear);
@@ -835,17 +835,19 @@ export default function App() {
             />
           </Field>
 
-          <Field label={t("spouse_gap_label")} hint={t("spouse_gap_hint")}>
-            <NumberInput
-              value={spouseGapYears}
-              onChange={(v) => setSpouseGapYears(clamp(v, 0, 20))}
-              min={0}
-              max={20}
-            />
-            <div className="text-xs text-gray-600 mt-1">
-              {t("spouse_gap_status", { active: includeSpouse && ltcMode === "TWO" })}
-            </div>
-          </Field>
+          {includeSpouse && (
+            <Field label={t("spouse_gap_label")} hint={t("spouse_gap_hint")}>
+              <NumberInput
+                value={spouseGapYears}
+                onChange={(v) => setSpouseGapYears(clamp(v, 0, 20))}
+                min={0}
+                max={20}
+              />
+              <div className="text-xs text-gray-600 mt-1">
+                {t("spouse_gap_status", { active: includeSpouse && ltcMode === "TWO" })}
+              </div>
+            </Field>
+          )}
 
           <Field label={t("cost_growth_label")} hint={t("cost_growth_hint")}>
             <NumberInput value={costGrowthPct} onChange={(v) => setCostGrowthPct(clamp(v, 0, 15))} min={0} max={15} />
