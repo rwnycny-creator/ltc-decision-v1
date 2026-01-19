@@ -24,18 +24,14 @@ const fmtUSD = (n) => {
 const StepShell = ({ title, subtitle, children }) => (
   <div className="max-w-4xl mx-auto px-5 sm:px-8 py-10 sm:py-12">
     <div
-      style={{
-        fontSize: "18px",      // 你想再小就改 16px
-        lineHeight: "24px",
-        fontWeight: 600,
-        marginBottom: "8px",
-      }}
+      className="tracking-tight text-[22px] sm:text-[24px] mb-2"
+      style={{ fontFamily: '"Fraunces", serif', fontWeight: 600 }}
     >
       {title}
     </div>
 
     {subtitle && (
-      <div style={{ fontSize: "12px", lineHeight: "18px", color: "#4B5563", marginBottom: "20px" }}>
+      <div className="text-[13px] sm:text-sm text-slate-600 mb-5 leading-relaxed">
         {subtitle}
       </div>
     )}
@@ -76,7 +72,7 @@ const NumberInput = ({
       inputMode="numeric"
       pattern="[0-9]*"
       placeholder={placeholder}
-      className={`w-full rounded-xl border px-3 py-2 text-base ${className}`}
+      className={`w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-base shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-300 ${className}`}
       value={text}
       onChange={(e) => {
         let next = e.target.value.replace(/\D/g, "");
@@ -112,8 +108,8 @@ const ChoicePills = ({ value, onChange, options }) => (
           key={opt.value}
           type="button"
           onClick={() => onChange(opt.value)}
-          className={`rounded-full border px-3 py-2 text-sm transition flex items-center gap-2 ${
-            active ? "border-black bg-gray-50" : "hover:bg-gray-50"
+          className={`rounded-full border px-3 py-2 text-sm transition flex items-center gap-2 shadow-sm ${
+            active ? "border-slate-900 bg-white" : "border-slate-200 bg-white/70 hover:bg-white"
           }`}
         >
           <span>{opt.label}</span>
@@ -125,16 +121,18 @@ const ChoicePills = ({ value, onChange, options }) => (
 );
 
 const Nav = ({ step, setStep, canNext = true }) => (
-  <div className="flex justify-between mt-8">
+  <div className="flex flex-col sm:flex-row gap-3 justify-between mt-8">
     <button
-      className="px-4 py-2 rounded-lg border"
+      className="w-full sm:w-auto px-4 py-2 rounded-xl border border-slate-200 bg-white/80 shadow-sm"
       disabled={step === 1}
       onClick={() => setStep(step - 1)}
     >
       上一步
     </button>
     <button
-      className={`px-4 py-2 rounded-lg ${canNext ? "bg-black text-white" : "bg-gray-300 text-gray-500"}`}
+      className={`w-full sm:w-auto px-4 py-2 rounded-xl shadow-sm ${
+        canNext ? "bg-slate-900 text-white" : "bg-slate-300 text-slate-500"
+      }`}
       disabled={!canNext}
       onClick={() => setStep(step + 1)}
     >
@@ -850,7 +848,7 @@ export default function App() {
      主渲染
 ====================== */
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen">
       {step === 1 && renderScreen1()}
       {step === 2 && renderScreen2()}
       {step === 3 && renderScreen3()}
