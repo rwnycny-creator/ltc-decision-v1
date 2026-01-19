@@ -146,8 +146,8 @@ const Nav = ({ step, setStep, canNext = true }) => (
 // ✅ Screen6 棒图行（固定放在 App 外，避免组件被重建）
 const BarRow = ({ label, contract, oop, remain, maxValue }) => {
   const toPct = (x) => {
-    if (!maxValue || !Number.isFinite(x) || x <= 0) return "0%";
-    return `${(100 * (x / maxValue)).toFixed(2)}%`;
+    if (!maxValue || !Number.isFinite(x) || x <= 0) return 0;
+    return (100 * (x / maxValue));
   };
 
   return (
@@ -158,10 +158,20 @@ const BarRow = ({ label, contract, oop, remain, maxValue }) => {
           合同 {fmtUSD(contract)} · 自付 {fmtUSD(oop)} · 支付后剩余 {fmtUSD(remain)}
         </div>
       </div>
-      <div className="h-4 w-full rounded-full bg-gray-200 overflow-hidden flex">
-        <div className="h-full bg-blue-400" style={{ width: toPct(contract) }} />
-        <div className="h-full bg-red-400" style={{ width: toPct(oop) }} />
-        <div className="h-full bg-green-400" style={{ width: toPct(remain) }} />
+      <div
+        className="h-4 w-full rounded-full bg-gray-200 overflow-hidden flex"
+        style={{
+          height: "14px",
+          width: "100%",
+          borderRadius: "999px",
+          background: "#e5e7eb",
+          overflow: "hidden",
+          display: "flex",
+        }}
+      >
+        <div className="h-full bg-blue-400" style={{ width: `${toPct(contract).toFixed(2)}%`, background: "#60a5fa", height: "100%" }} />
+        <div className="h-full bg-red-400" style={{ width: `${toPct(oop).toFixed(2)}%`, background: "#f87171", height: "100%" }} />
+        <div className="h-full bg-green-400" style={{ width: `${toPct(remain).toFixed(2)}%`, background: "#4ade80", height: "100%" }} />
       </div>
     </div>
   );
