@@ -293,7 +293,7 @@ const StepShell = ({ title, subtitle, step, total = 6, stepLabel, children }) =>
     </div>
 
     {subtitle && (
-      <div className="text-[13px] sm:text-sm text-slate-600 mb-5 leading-relaxed">
+      <div className="text-[13px] sm:text-sm text-slate-600 mb-6 leading-relaxed">
         {subtitle}
       </div>
     )}
@@ -304,7 +304,10 @@ const StepShell = ({ title, subtitle, step, total = 6, stepLabel, children }) =>
 
 const Field = ({ label, hint, children }) => (
   <div>
-    <div className="text-sm font-medium mb-1">{label}</div>
+    <div className="text-sm font-medium mb-1 flex items-start gap-2">
+      <span className="mt-[6px] h-1.5 w-1.5 rounded-full bg-slate-400 shrink-0" />
+      <span>{label}</span>
+    </div>
     {children}
     {hint && <div className="text-xs text-gray-500 mt-1">{hint}</div>}
   </div>
