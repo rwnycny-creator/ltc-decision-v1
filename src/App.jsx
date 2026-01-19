@@ -131,14 +131,14 @@ const i18n = {
     table_end_assets: "期末资产",
     table_year_row: ({ year }) => `第 ${year} 年`,
     reset_button: "回到第 1 步重新测试",
-    value_anchor_choices: [
-      "在市场低点被迫卖资产",
-      "被迫卖掉房子或核心资产",
-      "被迫进入不想去的护理机构",
-      "完全依赖子女或他人决策",
-      "被单一合同或产品锁死选择",
-      "现金流突然断裂，来不及调整",
-    ],
+    value_anchor_choices: {
+      market_low: "在市场低点被迫卖资产",
+      forced_sale: "被迫卖掉房子或核心资产",
+      forced_facility: "被迫进入不想去的护理机构",
+      lose_autonomy: "完全依赖子女或他人决策",
+      locked_product: "被单一合同或产品锁死选择",
+      cashflow_break: "现金流突然断裂，来不及调整",
+    },
   },
   en: {
     lang_zh: "中文",
@@ -254,14 +254,14 @@ const i18n = {
     table_end_assets: "Ending assets",
     table_year_row: ({ year }) => `Year ${year}`,
     reset_button: "Restart from step 1",
-    value_anchor_choices: [
-      "Forced to sell assets at a market low",
-      "Forced to sell a home or core assets",
-      "Forced into an undesired care facility",
-      "Rely completely on children or others to decide",
-      "Locked into a single contract or product",
-      "Cash flow collapses before adjustments are possible",
-    ],
+    value_anchor_choices: {
+      market_low: "Forced to sell assets at a market low",
+      forced_sale: "Forced to sell a home or core assets",
+      forced_facility: "Forced into an undesired care facility",
+      lose_autonomy: "Rely completely on children or others to decide",
+      locked_product: "Locked into a single contract or product",
+      cashflow_break: "Cash flow collapses before adjustments are possible",
+    },
   },
 };
 
@@ -472,7 +472,7 @@ export default function App() {
   /* -----------------------
      Screen 1：价值锚点
   ----------------------- */
-  const choices = t("value_anchor_choices");
+  const choices = Object.entries(t("value_anchor_choices")).map(([id, label]) => ({ id, label }));
   const [valueAnchor, setValueAnchor] = useState([]);
 
   /* -----------------------
@@ -693,24 +693,24 @@ export default function App() {
     >
       <div className="grid md:grid-cols-2 gap-3">
         {choices.map((c) => {
-          const active = valueAnchor.includes(c);
+          const active = valueAnchor.includes(c.id);
           return (
             <button
-              key={c}
+              key={c.id}
               className={`text-left rounded-2xl border p-4 transition ${
                 active ? "border-black bg-gray-50" : "hover:bg-gray-50"
               }`}
               onClick={() => {
                 setValueAnchor((prev) => {
-                  if (prev.includes(c)) return prev.filter((x) => x !== c);
+                  if (prev.includes(c.id)) return prev.filter((x) => x !== c.id);
                   if (prev.length >= 3) return prev;
-                  return [...prev, c];
+                  return [...prev, c.id];
                 });
               }}
               type="button"
             >
               <div className="text-sm font-medium flex items-center justify-between">
-                <span>{c}</span>
+                <span>{c.label}</span>
                 {/* ✅ 只保留一个勾 */}
                 {active && <span className="text-lg">✅</span>}
               </div>
