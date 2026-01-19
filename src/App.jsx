@@ -145,10 +145,22 @@ const Nav = ({ step, setStep, canNext = true }) => (
 
 // ✅ Screen6 棒图行（固定放在 App 外，避免组件被重建）
 const BarRow = ({ label, contract, oop, remain, maxValue }) => {
-  const toPct = (x) => {
-    if (!maxValue || !Number.isFinite(x) || x <= 0) return 0;
-    return (100 * (x / maxValue));
+  const pct = (x) => {
+    if (!Number.isFinite(x) || x <= 0) return 0;
+    const base = Number.isFinite(maxValue) && maxValue > 0 ? maxValue : 1;
+    return (100 * (x / base));
   };
+
+  let w1 = pct(contract);
+  let w2 = pct(oop);
+  let w3 = pct(remain);
+  const sum = w1 + w2 + w3;
+  if (sum > 100) {
+    const scale = 100 / sum;
+    w1 *= scale;
+    w2 *= scale;
+    w3 *= scale;
+  }
 
   return (
     <div className="space-y-1">
@@ -159,19 +171,20 @@ const BarRow = ({ label, contract, oop, remain, maxValue }) => {
         </div>
       </div>
       <div
-        className="h-4 w-full rounded-full bg-gray-200 overflow-hidden flex"
+        className="w-full"
         style={{
           height: "14px",
           width: "100%",
           borderRadius: "999px",
           background: "#e5e7eb",
           overflow: "hidden",
-          display: "flex",
         }}
       >
-        <div className="h-full bg-blue-400" style={{ width: `${toPct(contract).toFixed(2)}%`, background: "#60a5fa", height: "100%" }} />
-        <div className="h-full bg-red-400" style={{ width: `${toPct(oop).toFixed(2)}%`, background: "#f87171", height: "100%" }} />
-        <div className="h-full bg-green-400" style={{ width: `${toPct(remain).toFixed(2)}%`, background: "#4ade80", height: "100%" }} />
+        <svg viewBox="0 0 100 10" preserveAspectRatio="none" width="100%" height="100%">
+          <rect x="0" y="0" width={w1} height="10" fill="#60a5fa" />
+          <rect x={w1} y="0" width={w2} height="10" fill="#f87171" />
+          <rect x={w1 + w2} y="0" width={w3} height="10" fill="#4ade80" />
+        </svg>
       </div>
     </div>
   );
