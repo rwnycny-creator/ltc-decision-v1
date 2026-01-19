@@ -21,8 +21,21 @@ const fmtUSD = (n) => {
 ====================== */
 
 // ✅ 标题统一“减半感”：text-lg（比 text-xl 明显更小）
-const StepShell = ({ title, subtitle, children }) => (
+const StepShell = ({ title, subtitle, step, total = 6, children }) => (
   <div className="max-w-4xl mx-auto px-5 sm:px-8 py-10 sm:py-12">
+    {Number.isFinite(step) && (
+      <div className="mb-4">
+        <div className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/70 px-3 py-1 text-[12px] font-semibold text-slate-700 shadow-sm">
+          Step {step} of {total}
+          <span className="h-1.5 w-10 overflow-hidden rounded-full bg-slate-200">
+            <span
+              className="block h-full rounded-full bg-slate-900"
+              style={{ width: `${Math.round((step / total) * 100)}%` }}
+            />
+          </span>
+        </div>
+      </div>
+    )}
     <div
       className="tracking-tight text-[22px] sm:text-[24px] mb-2"
       style={{ fontFamily: '"Fraunces", serif', fontWeight: 600 }}
@@ -420,6 +433,7 @@ export default function App() {
 
   const renderScreen1 = () => (
     <StepShell
+      step={1}
       title="你的长期照护，最怕失去什么？"
       subtitle="长期照护真正可怕的，往往不是花多少钱，而是你在关键时刻还能不能选择。请选择最不希望发生的 1–3 项。"
     >
@@ -462,6 +476,7 @@ export default function App() {
 
   const renderScreen2 = () => (
     <StepShell
+      step={2}
       title="建立你的压力测试基准"
       subtitle="先不引入外部概率数据，把框架跑通。性别/配偶参数为后续模型做准备。"
     >
@@ -601,6 +616,7 @@ export default function App() {
 
   const renderScreen3 = () => (
     <StepShell
+      step={3}
       title="哪些钱，真的能在压力时刻用上？"
       subtitle="我们只计算你愿意、也能快速动用的部分：现金/可变现资产 + 未来计划补充。"
     >
@@ -660,6 +676,7 @@ export default function App() {
 
   const renderScreen4 = () => (
     <StepShell
+      step={4}
       title="合同/福利：你希望“确定性覆盖”多少？"
       subtitle="工程参数：若发生 LTC，每年可由合同/福利支付多少、持续多少年。"
     >
@@ -708,6 +725,7 @@ export default function App() {
 
   const renderScreen5 = () => (
     <StepShell
+      step={5}
       title="缓冲系数（不含通胀）"
       subtitle="通胀/护理成本增长已在 Screen 2 进入成本路径。这里缓冲只覆盖：升级、额外服务、摩擦等非通胀不确定性。"
     >
@@ -765,6 +783,7 @@ export default function App() {
 
   const renderScreen6 = () => (
     <StepShell
+      step={6}
       title="结果摘要（含年度棒图）"
       subtitle="从情景开始后逐年展示：合同/福利、自付（缓冲池支付）、支付后剩余资产。"
     >
