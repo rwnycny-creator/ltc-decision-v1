@@ -1,102 +1,58 @@
-import React, { useMemo, useState, useEffect } from "react";
+// src/App.jsx
+import React, { useEffect, useMemo, useState } from "react";
 
-/**
- * Helpers
- */
-const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
+/* ======================
+   工具函数
+====================== */
+const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
 const fmtUSD = (n) => {
-  const x = Number(n);
-  if (!Number.isFinite(x)) return "-";
-  return x.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  const v = Number(n);
+  if (!Number.isFinite(v)) return "$0";
+  return v.toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
 };
 
-const safeNum = (x, fallback = 0) => {
-  const n = Number(x);
-  return Number.isFinite(n) ? n : fallback;
-};
+/* ======================
+   通用 UI 组件（注意：都在 App 外部，避免输入框丢焦点）
+====================== */
 
-/**
- * UI primitives
- */
-
-const StepShell = ({ title, subtitle, children }) => {
-  // 你说“标题太大，希望约一半”：这里直接把标题/副标题整体缩小一档
-  return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <div className="rounded-2xl border bg-white shadow-sm p-6">
-        <div className="mb-6">
-          <h1 className="text-lg md:text-xl font-semibold tracking-tight">{title}</h1>
-          {subtitle ? <div className="text-xs md:text-sm text-gray-600 mt-2 leading-relaxed">{subtitle}</div> : null}
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-};
+// ✅ 标题统一“减半感”：text-lg（比 text-xl 明显更小）
+const StepShell = ({ title, subtitle, children }) => (
+  <div className="max-w-4xl mx-auto px-4 py-8">
+    <h1 className="text-lg md:text-lg font-semibold mb-2">{title}</h1>
+    {subtitle && <div className="text-xs md:text-xs text-gray-600 mb-6">{subtitle}</div>}
+    {children}
+  </div>
+);
 
 const Field = ({ label, hint, children }) => (
   <div>
-    <div className="text-sm font-medium">{label}</div>
-    {hint ? <div className="text-xs text-gray-500 mt-1">{hint}</div> : null}
-    <div className="mt-2">{children}</div>
+    <div className="text-sm font-medium mb-1">{label}</div>
+    {children}
+    {hint && <div className="text-xs text-gray-500 mt-1">{hint}</div>}
   </div>
 );
 
-// 单选/多选 pill（用在 Screen2 的“性别”“一段/两段”）
-const ChoicePills = ({ options, value, onChange }) => (
-  <div className="flex flex-wrap gap-2">
-    {options.map((opt) => {
-      const active = value === opt.value;
-      return (
-        <button
-          key={opt.value}
-          type="button"
-          onClick={() => onChange(opt.value)}
-          className={`px-3 py-2 rounded-xl border text-sm transition ${
-            active ? "border-black bg-gray-100" : "border-gray-200 hover:bg-gray-50"
-          }`}
-        >
-          {opt.label}
-        </button>
-      );
-    })}
-  </div>
-);
+// ✅ NumberInput：连续输入不卡（输入时不 clamp；onBlur 才 clamp）
+const NumberInput = ({
+  value,
+  onChange,
+  min = 0,
+  max = Infinity,
+  placeholder = "",
+  className = "",
+  maxDigits,
+}) => {
+  const [text, setText] = useState(value === undefined || value === null ? "" : String(value));
 
-const Toggle = ({ checked, onChange, label }) => (
-  <button
-    type="button"
-    onClick={() => onChange(!checked)}
-    className={`w-full flex items-center justify-between rounded-2xl border p-4 text-left transition ${
-      checked ? "border-black bg-gray-50" : "border-gray-200 hover:bg-gray-50"
-    }`}
-  >
-    <div className="text-sm font-medium">{label}</div>
-    <div
-      className={`h-6 w-10 rounded-full relative transition ${checked ? "bg-black" : "bg-gray-300"}`}
-      aria-hidden="true"
-    >
-      <div
-        className={`h-5 w-5 bg-white rounded-full absolute top-0.5 transition ${
-          checked ? "left-5" : "left-0.5"
-        }`}
-      />
-    </div>
-  </button>
-);
-
-/**
- * NumberInput
- * - 允许连续输入（不会每输一位就被 clamp）
- * - 失焦时再 clamp
- * - 外部 value 改变时同步显示
- */
-const NumberInput = ({ value, onChange, min = 0, max = 1e12, step, placeholder = "", className = "" }) => {
-  const [text, setText] = useState(value ?? "");
-
+  // 外部 value 改变时同步（例如点击按钮导致的状态变更）
   useEffect(() => {
-    setText(value ?? "");
+    if (value === undefined || value === null || String(value) === "") setText("");
+    else setText(String(value));
   }, [value]);
 
   return (
@@ -106,9 +62,10 @@ const NumberInput = ({ value, onChange, min = 0, max = 1e12, step, placeholder =
       pattern="[0-9]*"
       placeholder={placeholder}
       className={`w-full rounded-xl border px-3 py-2 text-base ${className}`}
-      value={String(text)}
+      value={text}
       onChange={(e) => {
-        const next = e.target.value.replace(/\D/g, "");
+        let next = e.target.value.replace(/\D/g, "");
+        if (maxDigits) next = next.slice(0, maxDigits);
         setText(next);
       }}
       onBlur={() => {
@@ -130,39 +87,78 @@ const NumberInput = ({ value, onChange, min = 0, max = 1e12, step, placeholder =
   );
 };
 
-const Nav = ({ step, setStep, canNext = true, canPrev = true, nextLabel = "下一步", prevLabel = "上一步" }) => (
-  <div className="mt-6 flex items-center justify-between">
-    <button
-      type="button"
-      disabled={!canPrev || step <= 1}
-      onClick={() => setStep((s) => Math.max(1, s - 1))}
-      className={`px-4 py-2 rounded-xl border text-sm ${
-        !canPrev || step <= 1 ? "text-gray-400 border-gray-200" : "hover:bg-gray-50 border-gray-300"
-      }`}
-    >
-      {prevLabel}
-    </button>
+// ✅ 可见选择结果（高亮 + ✅），解决你说的“看不到选择的结果”
+const ChoicePills = ({ value, onChange, options }) => (
+  <div className="flex flex-wrap gap-2">
+    {options.map((opt) => {
+      const active = value === opt.value;
+      return (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => onChange(opt.value)}
+          className={`rounded-full border px-3 py-2 text-sm transition flex items-center gap-2 ${
+            active ? "border-black bg-gray-50" : "hover:bg-gray-50"
+          }`}
+        >
+          <span>{opt.label}</span>
+          {active && <span>✅</span>}
+        </button>
+      );
+    })}
+  </div>
+);
 
+const Nav = ({ step, setStep, canNext = true }) => (
+  <div className="flex justify-between mt-8">
     <button
-      type="button"
-      disabled={!canNext}
-      onClick={() => setStep((s) => s + 1)}
-      className={`px-4 py-2 rounded-xl text-sm ${
-        canNext ? "bg-black text-white hover:opacity-90" : "bg-gray-200 text-gray-500"
-      }`}
+      className="px-4 py-2 rounded-lg border"
+      disabled={step === 1}
+      onClick={() => setStep(step - 1)}
     >
-      {nextLabel}
+      上一步
+    </button>
+    <button
+      className={`px-4 py-2 rounded-lg ${canNext ? "bg-black text-white" : "bg-gray-300 text-gray-500"}`}
+      disabled={!canNext}
+      onClick={() => setStep(step + 1)}
+    >
+      下一步
     </button>
   </div>
 );
 
-/**
- * App
- */
+// ✅ Screen6 棒图行（固定放在 App 外，避免组件被重建）
+const BarRow = ({ label, contract, oop, remain, maxValue }) => {
+  const toPct = (x) => `${(100 * (x / maxValue)).toFixed(2)}%`;
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between text-xs text-gray-600">
+        <div>{label}</div>
+        <div className="tabular-nums">
+          合同 {fmtUSD(contract)} · 自付 {fmtUSD(oop)} · 支付后剩余 {fmtUSD(remain)}
+        </div>
+      </div>
+      <div className="h-4 w-full rounded-full bg-gray-200 overflow-hidden flex">
+        <div className="h-full bg-blue-400" style={{ width: toPct(contract) }} />
+        <div className="h-full bg-red-400" style={{ width: toPct(oop) }} />
+        <div className="h-full bg-green-400" style={{ width: toPct(remain) }} />
+      </div>
+    </div>
+  );
+};
+
+/* ======================
+   App
+====================== */
+
 export default function App() {
+  const nowYear = new Date().getFullYear();
   const [step, setStep] = useState(1);
 
-  // Screen 1 choices
+  /* -----------------------
+     Screen 1：价值锚点
+  ----------------------- */
   const choices = [
     "在市场低点被迫卖资产",
     "被迫卖掉房子或核心资产",
@@ -173,109 +169,216 @@ export default function App() {
   ];
   const [valueAnchor, setValueAnchor] = useState([]);
 
-  // Screen2: birth year + scenario
-  const nowYear = new Date().getFullYear();
-  const [birthYear, setBirthYear] = useState(undefined); // number
-  const [birthYearText, setBirthYearText] = useState(""); // string typed
-  const currentAge = useMemo(() => {
-    const y = birthYear ?? Number(birthYearText);
-    if (!Number.isFinite(y) || y < 1900 || y > nowYear) return 0;
-    return nowYear - y;
-  }, [birthYear, birthYearText, nowYear]);
+  /* -----------------------
+     Screen 2：情景输入
+  ----------------------- */
+  const [birthYear, setBirthYear] = useState(undefined);
 
-  // Scenario params
-  const [sex, setSex] = useState("M"); // M/F
-  const [includeSpouse, setIncludeSpouse] = useState(true);
-  const [spouseSex, setSpouseSex] = useState("F");
-  const [spouseBirthYearText, setSpouseBirthYearText] = useState("");
-  const spouseAge = useMemo(() => {
-    const y = Number(spouseBirthYearText);
-    if (!Number.isFinite(y) || y < 1900 || y > nowYear) return 0;
-    return nowYear - y;
-  }, [spouseBirthYearText, nowYear]);
+  const [genderSelf, setGenderSelf] = useState("M"); // M/F
 
-  const [scenarioType, setScenarioType] = useState("ONE"); // ONE or TWO
+  const [includeSpouse, setIncludeSpouse] = useState(false);
+  const [spouseBirthYear, setSpouseBirthYear] = useState(undefined);
+  const [genderSpouse, setGenderSpouse] = useState("F");
+
+  const [ltcMode, setLtcMode] = useState("ONE"); // ONE / TWO
   const [startAge, setStartAge] = useState(85);
   const [durationYears, setDurationYears] = useState(5);
 
-  // Advanced options requested
-  const [spouseGapYears, setSpouseGapYears] = useState(3); // 两人发生间隔（年）
-  const [costInflationPct, setCostInflationPct] = useState(3); // 成本年化增长率（%）
+  // ✅ 高级选项：两人发生间隔 + 成本年化增长率
+  const [spouseGapYears, setSpouseGapYears] = useState(3);
+  const [costGrowthPct, setCostGrowthPct] = useState(3);
 
-  // LTC cost today
+  // “今天价格”的年度 LTC 成本
   const [annualCostToday, setAnnualCostToday] = useState(300000);
 
-  // Screen3: assets / pool etc
+  const currentAge = useMemo(() => {
+    const y = Number(birthYear);
+    if (!y || y < 1900 || y > nowYear) return null;
+    return nowYear - y;
+  }, [birthYear, nowYear]);
+
+  const spouseAge = useMemo(() => {
+    const y = Number(spouseBirthYear);
+    if (!y || y < 1900 || y > nowYear) return null;
+    return nowYear - y;
+  }, [spouseBirthYear, nowYear]);
+
+  const costGrowth = useMemo(() => clamp(Number(costGrowthPct) / 100, 0, 0.15), [costGrowthPct]);
+
+  const yearsToStart = useMemo(() => {
+    if (!currentAge) return 0;
+    return Math.max(0, Number(startAge) - Number(currentAge));
+  }, [currentAge, startAge]);
+
+  // ✅ Screen2 第三点：用 todayCost + 通胀（增长率）推算到“情景起点年龄”的年度成本
+  const annualCostAtStart = useMemo(() => {
+    const base = Number(annualCostToday) || 0;
+    return Math.round(base * Math.pow(1 + costGrowth, yearsToStart));
+  }, [annualCostToday, costGrowth, yearsToStart]);
+
+  /* -----------------------
+     Screen 3：缓冲池与投入
+  ----------------------- */
   const [currentPool, setCurrentPool] = useState(0);
   const [annualContribution, setAnnualContribution] = useState(100000);
   const [contributionYears, setContributionYears] = useState(10);
   const [netReturnChoice, setNetReturnChoice] = useState("3.0");
-  const netReturn = useMemo(() => clamp(Number(netReturnChoice) / 100, 0, 0.08), [netReturnChoice]);
 
-  // Plan contract
+  const netReturn = useMemo(() => clamp(Number(netReturnChoice) / 100, 0, 0.12), [netReturnChoice]);
+
+  const contribYearsEff = useMemo(() => Math.max(0, Math.min(Number(contributionYears) || 0, yearsToStart)), [
+    contributionYears,
+    yearsToStart,
+  ]);
+
+  /* -----------------------
+     Screen 4：合同/福利
+  ----------------------- */
   const [hasContract, setHasContract] = useState(false);
   const [annualContractBenefit, setAnnualContractBenefit] = useState(138000);
   const [contractBenefitYears, setContractBenefitYears] = useState(6);
 
-  // Buffer
-  const [techBufferPct, setTechBufferPct] = useState(18);
+  /* -----------------------
+     Screen 5：缓冲系数（不含通胀）
+  ----------------------- */
+  // ✅ 你指出“通胀已在前面算过，这里要去掉通胀”，所以这里只是“非通胀不确定性”
+  const [bufferPct, setBufferPct] = useState(15);
+  const bufferMultiplier = useMemo(() => 1 + (Number(bufferPct) || 0) / 100, [bufferPct]);
 
-  // Plan toggles (说明用，后续再赋真正功能)
+  // Plan B/C（保留，但此版重点按你要求修 1/2/6 的问题；棒图会体现效果）
   const [planBOn, setPlanBOn] = useState(false);
-  const [planCOn, setPlanCOn] = useState(true);
+  const [planBExtraPool, setPlanBExtraPool] = useState(250000);
 
-  /**
-   * Basic finance
-   */
-  const fv = useMemo(() => {
-    const principal = safeNum(currentPool);
-    const contrib = safeNum(annualContribution);
-    const years = Math.max(0, safeNum(contributionYears));
-    const r = safeNum(netReturn, 0);
+  const [planCOn, setPlanCOn] = useState(false);
+  const [planCCostCutPct, setPlanCCostCutPct] = useState(10);
+  const effectiveCostCut = useMemo(() => {
+    if (!planCOn) return 1;
+    return 1 - clamp((Number(planCCostCutPct) || 0) / 100, 0, 0.5);
+  }, [planCOn, planCCostCutPct]);
 
-    // FV of principal
-    let total = principal * Math.pow(1 + r, years);
-    // FV of annuity (end of year contributions)
-    if (r === 0) total += contrib * years;
-    else total += contrib * ((Math.pow(1 + r, years) - 1) / r);
-    return Math.max(0, total);
-  }, [currentPool, annualContribution, contributionYears, netReturn]);
+  /* -----------------------
+     推到情景开始时的资金池（含 PlanB）
+  ----------------------- */
+  const poolAtStart = useMemo(() => {
+    let pool = Number(currentPool) || 0;
+    const r = netReturn;
 
-  /**
-   * Screen2 derived “工程假设”：把 today cost 用通胀推到“情景起点年龄”
-   * 这里先用 (startAge - currentAge) 年做推演（没有外部数据也能跑通）
-   */
-  const yearsToStart = Math.max(0, safeNum(startAge) - safeNum(currentAge));
-  const inflatedAnnualCostAtStart = useMemo(() => {
-    const g = clamp(safeNum(costInflationPct) / 100, 0, 0.15);
-    return annualCostToday * Math.pow(1 + g, yearsToStart);
-  }, [annualCostToday, costInflationPct, yearsToStart]);
+    for (let y = 1; y <= yearsToStart; y++) {
+      pool = pool * (1 + r);
+      if (y <= contribYearsEff) pool += Number(annualContribution) || 0;
+    }
+    if (planBOn) pool += Number(planBExtraPool) || 0;
+    return Math.round(pool);
+  }, [currentPool, annualContribution, yearsToStart, contribYearsEff, netReturn, planBOn, planBExtraPool]);
 
-  // Total cost (simplified)
-  const totalLtcYears = useMemo(() => {
-    if (!includeSpouse) return durationYears;
-    if (scenarioType === "ONE") return durationYears;
-    // TWO: 两段相加
-    return durationYears * 2;
-  }, [includeSpouse, scenarioType, durationYears]);
+  /* -----------------------
+     情景总年数
+  ----------------------- */
+  const ltcHorizonYears = useMemo(() => {
+    if (ltcMode === "ONE") return Number(durationYears) || 0;
+    return (Number(spouseGapYears) || 0) + (Number(durationYears) || 0);
+  }, [ltcMode, spouseGapYears, durationYears]);
 
-  const totalCostAtStart = useMemo(() => {
-    // 这里先用“起点年成本 × 年数”做压力测试骨架
-    // 更精细的“逐年递增/两段间隔”后面再做
-    return inflatedAnnualCostAtStart * safeNum(totalLtcYears);
-  }, [inflatedAnnualCostAtStart, totalLtcYears]);
+  /* -----------------------
+     成本路径（情景开始后逐年）
+     - costGrowth 负责“通胀/增长”
+     - bufferMultiplier 负责“非通胀不确定性”
+     - planC 负责“成本降低”
+  ----------------------- */
+  const ltcCostSeries = useMemo(() => {
+    const g = costGrowth;
+    const base = Number(annualCostAtStart) || 0;
+    const dur = Number(durationYears) || 0;
+    const gap = Number(spouseGapYears) || 0;
+    const years = Math.max(0, ltcHorizonYears);
 
-  const bufferAmount = useMemo(() => {
-    // Screen5：缓冲比例/倍数/系数关系说明：这里统一用“缓冲比例 techBufferPct”作为系数
-    // 你指出前面已计入通胀，因此这里不再引入通胀，仅对成本做额外安全边际
-    return totalCostAtStart * (clamp(safeNum(techBufferPct) / 100, 0, 1));
-  }, [totalCostAtStart, techBufferPct]);
+    const arr = [];
+    for (let t = 0; t < years; t++) {
+      let cost = 0;
 
-  /**
-   * Screens
-   */
+      // 第一段：t=0..dur-1
+      if (t < dur) cost += base * Math.pow(1 + g, t);
 
-  const Screen1 = () => (
+      // 第二段：仅 includeSpouse && TWO
+      if (includeSpouse && ltcMode === "TWO") {
+        const t2 = t - gap;
+        if (t2 >= 0 && t2 < dur) {
+          cost += base * Math.pow(1 + g, t); // 同一时间轴下第二人同年成本
+        }
+      }
+
+      cost = cost * effectiveCostCut;
+      cost = cost * bufferMultiplier;
+
+      arr.push(Math.round(cost));
+    }
+    return arr;
+  }, [
+    annualCostAtStart,
+    costGrowth,
+    durationYears,
+    spouseGapYears,
+    ltcHorizonYears,
+    includeSpouse,
+    ltcMode,
+    effectiveCostCut,
+    bufferMultiplier,
+  ]);
+
+  /* -----------------------
+     合同给付序列（默认不再通胀，避免重复）
+  ----------------------- */
+  const contractSeries = useMemo(() => {
+    const years = Math.max(0, ltcHorizonYears);
+    const arr = [];
+    for (let t = 0; t < years; t++) {
+      if (!hasContract) arr.push(0);
+      else arr.push(t < (Number(contractBenefitYears) || 0) ? (Number(annualContractBenefit) || 0) : 0);
+    }
+    return arr;
+  }, [ltcHorizonYears, hasContract, annualContractBenefit, contractBenefitYears]);
+
+  /* -----------------------
+     timeline：逐年资产 / 支出
+  ----------------------- */
+  const timeline = useMemo(() => {
+    const years = Math.max(0, ltcHorizonYears);
+    let assets = Number(poolAtStart) || 0;
+
+    const rows = [];
+    for (let t = 0; t < years; t++) {
+      const cost = ltcCostSeries[t] || 0;
+      const contract = contractSeries[t] || 0;
+      const oop = Math.max(0, cost - contract);
+
+      const startAssets = assets;
+
+      assets = Math.max(0, assets - oop);
+      assets = assets * (1 + netReturn);
+
+      rows.push({
+        yearIndex: t + 1,
+        startAssets: Math.round(startAssets),
+        ltcCost: Math.round(cost),
+        contract: Math.round(contract),
+        oop: Math.round(oop),
+        endAssets: Math.round(assets),
+      });
+    }
+    return rows;
+  }, [ltcHorizonYears, poolAtStart, ltcCostSeries, contractSeries, netReturn]);
+
+  const chartMax = useMemo(() => {
+    let m = 1;
+    for (const r of timeline) m = Math.max(m, r.startAssets, r.ltcCost);
+    return m;
+  }, [timeline]);
+
+  /* ======================
+     各 Screen 渲染函数（不是组件！避免被当成新组件类型）
+====================== */
+
+  const renderScreen1 = () => (
     <StepShell
       title="你的长期照护，最怕失去什么？"
       subtitle="长期照护真正可怕的，往往不是花多少钱，而是你在关键时刻还能不能选择。请选择最不希望发生的 1–3 项。"
@@ -286,9 +389,8 @@ export default function App() {
           return (
             <button
               key={c}
-              type="button"
-              className={`text-left rounded-2xl border p-4 hover:bg-gray-50 transition ${
-                active ? "border-black bg-gray-50" : ""
+              className={`text-left rounded-2xl border p-4 transition ${
+                active ? "border-black bg-gray-50" : "hover:bg-gray-50"
               }`}
               onClick={() => {
                 setValueAnchor((prev) => {
@@ -297,306 +399,422 @@ export default function App() {
                   return [...prev, c];
                 });
               }}
+              type="button"
             >
               <div className="text-sm font-medium flex items-center justify-between">
                 <span>{c}</span>
-                {/* 只保留一个 ✅（右上角） */}
-                {active ? <span aria-label="selected">✅</span> : null}
+                {/* ✅ 只保留一个勾 */}
+                {active && <span className="text-lg">✅</span>}
               </div>
-              <div className="text-xs text-gray-500 mt-1">{active ? "已选择（再点可取消）" : "点击选择"}</div>
+              <div className="text-xs text-gray-500 mt-1">
+                {active ? "已选择（可再次点击取消）" : "点击选择"}
+              </div>
             </button>
           );
         })}
       </div>
 
-      <div className="mt-4 text-xs text-gray-500">已选：{valueAnchor.length} / 3</div>
+      <div className="mt-4 text-xs text-gray-600">已选：{valueAnchor.length} / 3</div>
 
       <Nav step={step} setStep={setStep} canNext={valueAnchor.length >= 1} />
     </StepShell>
   );
 
-  const Screen2 = () => (
+  const renderScreen2 = () => (
     <StepShell
       title="建立你的压力测试基准"
-      subtitle="我们不预测概率，只测试后果。先设定一个你希望一定能扛住的情景。"
+      subtitle="先不引入外部概率数据，把框架跑通。性别/配偶参数为后续模型做准备。"
     >
-      <div className="grid md:grid-cols-3 gap-5">
-        <Field label="出生年份（YYYY）" hint="用于自动计算当前年龄（连续输入 4 位）。">
-          <input
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            className="w-full rounded-xl border px-3 py-2 text-base"
-            placeholder="例如：1957"
-            value={birthYearText}
-            onChange={(e) => {
-              // 只允许数字，最多 4 位 —— 不会失焦，可连续输入
-              const next = e.target.value.replace(/\D/g, "").slice(0, 4);
-              setBirthYearText(next);
-            }}
-            onBlur={() => {
-              const n = Number(birthYearText);
-              if (Number.isFinite(n) && n >= 1900 && n <= nowYear) setBirthYear(n);
-              else setBirthYear(undefined);
-            }}
-          />
-          <div className="text-xs text-gray-500 mt-2">
-            自动计算当前年龄：{currentAge > 0 ? `${currentAge} 岁` : "（请输入正确出生年份）"}
+      <div className="grid md:grid-cols-2 gap-5">
+        <div className="space-y-4">
+          <Field label="你的出生年份（YYYY）" hint="现在可连续输入 4 位；离开输入框会自动校验。">
+            <NumberInput
+              value={birthYear}
+              onChange={(v) => setBirthYear(clamp(v, 1900, nowYear))}
+              min={1900}
+              max={nowYear}
+              placeholder="例如：1957"
+              maxDigits={4}
+            />
+            <div className="text-xs text-gray-600 mt-2">
+              当前年龄：{currentAge ? `${currentAge} 岁` : "（请先输入有效出生年份）"}
+            </div>
+          </Field>
+
+          <Field label="你的性别（为后续概率模型预留）" hint="当前版本不进入计算，但会显示选择结果。">
+            <ChoicePills
+              value={genderSelf}
+              onChange={setGenderSelf}
+              options={[
+                { value: "M", label: "男" },
+                { value: "F", label: "女" },
+              ]}
+            />
+          </Field>
+
+          <Field label="是否考虑配偶" hint="开启后可输入配偶出生年与性别。">
+            <ChoicePills
+              value={includeSpouse ? "YES" : "NO"}
+              onChange={(v) => setIncludeSpouse(v === "YES")}
+              options={[
+                { value: "NO", label: "不考虑配偶" },
+                { value: "YES", label: "考虑配偶" },
+              ]}
+            />
+
+            {includeSpouse && (
+              <div className="mt-3 grid md:grid-cols-2 gap-3">
+                <div>
+                  <div className="text-sm font-medium mb-1">配偶出生年份（YYYY）</div>
+                  <NumberInput
+                    value={spouseBirthYear}
+                    onChange={(v) => setSpouseBirthYear(clamp(v, 1900, nowYear))}
+                    min={1900}
+                    max={nowYear}
+                    placeholder="例如：1959"
+                    maxDigits={4}
+                  />
+                  <div className="text-xs text-gray-600 mt-2">
+                    配偶年龄：{spouseAge ? `${spouseAge} 岁` : "（可选）"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm font-medium mb-2">配偶性别</div>
+                  <ChoicePills
+                    value={genderSpouse}
+                    onChange={setGenderSpouse}
+                    options={[
+                      { value: "M", label: "男" },
+                      { value: "F", label: "女" },
+                    ]}
+                  />
+                </div>
+              </div>
+            )}
+          </Field>
+        </div>
+
+        <div className="space-y-4">
+          <Field label="情景：LTC 发生方式" hint="现在可见地显示选择结果。">
+            <ChoicePills
+              value={ltcMode}
+              onChange={setLtcMode}
+              options={[
+                { value: "ONE", label: "仅一人 1 段 LTC" },
+                { value: "TWO", label: "先后两人 2 段 LTC 相加" },
+              ]}
+            />
+          </Field>
+
+          <Field label="情景起点年龄" hint="例如 85；应 ≥ 当前年龄。">
+            <NumberInput value={startAge} onChange={(v) => setStartAge(clamp(v, 40, 110))} min={40} max={110} />
+          </Field>
+
+          <Field label="单段护理持续年限" hint="默认 5 年。">
+            <NumberInput
+              value={durationYears}
+              onChange={(v) => setDurationYears(clamp(v, 1, 20))}
+              min={1}
+              max={20}
+            />
+          </Field>
+
+          <Field label="高级：两人发生间隔（年）" hint="仅在“考虑配偶 + 两段”时有效。">
+            <NumberInput
+              value={spouseGapYears}
+              onChange={(v) => setSpouseGapYears(clamp(v, 0, 20))}
+              min={0}
+              max={20}
+            />
+            <div className="text-xs text-gray-600 mt-1">
+              当前状态：{includeSpouse && ltcMode === "TWO" ? "生效" : "（当前不生效）"}
+            </div>
+          </Field>
+
+          <Field label="高级：成本年化增长率（%）" hint="用于把“今天成本”推到“情景起点年龄”的成本。">
+            <NumberInput value={costGrowthPct} onChange={(v) => setCostGrowthPct(clamp(v, 0, 15))} min={0} max={15} />
+          </Field>
+
+          <Field label="LTC 年度成本（按今天价格）" hint="系统将按增长率推算到情景起点年龄。">
+            <NumberInput
+              value={annualCostToday}
+              onChange={(v) => setAnnualCostToday(clamp(v, 50000, 2000000))}
+              min={50000}
+              max={2000000}
+            />
+            <div className="text-xs text-gray-600 mt-2">
+              推算到情景起点年龄（{startAge} 岁）的年度成本 ≈{" "}
+              <span className="font-semibold">{fmtUSD(annualCostAtStart)}</span>
+              {currentAge ? (
+                <span className="text-gray-500">（从当前年龄 {currentAge} 岁推 {yearsToStart} 年）</span>
+              ) : (
+                <span className="text-gray-500">（未输入出生年时默认不外推）</span>
+              )}
+            </div>
+          </Field>
+        </div>
+      </div>
+
+      <Nav step={step} setStep={setStep} canNext />
+    </StepShell>
+  );
+
+  const renderScreen3 = () => (
+    <StepShell
+      title="哪些钱，真的能在压力时刻用上？"
+      subtitle="我们只计算你愿意、也能快速动用的部分：现金/可变现资产 + 未来计划补充。"
+    >
+      <div className="grid md:grid-cols-2 gap-5">
+        <div className="space-y-4">
+          <Field label="当前可用缓冲池（两人合计）" hint="例如：现金 + 可快速变现的投资账户。">
+            <NumberInput value={currentPool} onChange={(v) => setCurrentPool(clamp(v, 0, 50000000))} min={0} max={50000000} />
+            <div className="text-xs text-gray-600 mt-2">
+              当前缓冲池：<span className="font-semibold">{fmtUSD(currentPool)}</span>
+            </div>
+          </Field>
+
+          <Field label="每年可追加投入（两人合计）" hint="每年愿意从现金流/再平衡中追加到缓冲池的金额。">
+            <NumberInput
+              value={annualContribution}
+              onChange={(v) => setAnnualContribution(clamp(v, 0, 5000000))}
+              min={0}
+              max={5000000}
+            />
+          </Field>
+
+          <Field label="追加投入年数" hint="例如：投入 10 年（不超过到起点的年数）。">
+            <NumberInput value={contributionYears} onChange={(v) => setContributionYears(clamp(v, 0, 40))} min={0} max={40} />
+          </Field>
+        </div>
+
+        <div className="space-y-4">
+          <Field label="缓冲池净回报（%）" hint="税后/费用后净回报（工程假设）。">
+            <ChoicePills
+              value={netReturnChoice}
+              onChange={setNetReturnChoice}
+              options={[
+                { value: "1.0", label: "1%" },
+                { value: "2.0", label: "2%" },
+                { value: "3.0", label: "3%" },
+                { value: "4.0", label: "4%" },
+                { value: "5.0", label: "5%" },
+              ]}
+            />
+            <div className="text-xs text-gray-600 mt-2">
+              当前选择：<span className="font-semibold">{netReturnChoice}%</span>
+            </div>
+          </Field>
+
+          <div className="rounded-2xl border p-4 bg-gray-50">
+            <div className="text-sm font-semibold mb-1">提示</div>
+            <div className="text-xs text-gray-600 leading-relaxed">
+              成本通胀/增长已在 Screen 2 的成本路径里；这里的回报只用于缓冲池资产增长，不会重复把通胀叠加到成本。
+            </div>
           </div>
-        </Field>
-
-        <Field label="性别（用于后续概率模型预留）" hint="当前 v1 暂不用于计算，只做参数占位。">
-          <ChoicePills
-            value={sex}
-            onChange={setSex}
-            options={[
-              { label: "男", value: "M" },
-              { label: "女", value: "F" },
-            ]}
-          />
-          <div className="text-xs text-gray-500 mt-2">已选：{sex === "M" ? "男" : "女"}</div>
-        </Field>
-
-        <Field label="是否考虑配偶" hint="用于后续模型：一人/两人先后发生。">
-          <Toggle checked={includeSpouse} onChange={setIncludeSpouse} label={includeSpouse ? "考虑配偶" : "不考虑配偶"} />
-        </Field>
-      </div>
-
-      {includeSpouse ? (
-        <div className="grid md:grid-cols-3 gap-5 mt-5">
-          <Field label="配偶性别" hint="占位参数。">
-            <ChoicePills
-              value={spouseSex}
-              onChange={setSpouseSex}
-              options={[
-                { label: "男", value: "M" },
-                { label: "女", value: "F" },
-              ]}
-            />
-            <div className="text-xs text-gray-500 mt-2">已选：{spouseSex === "M" ? "男" : "女"}</div>
-          </Field>
-
-          <Field label="配偶出生年（YYYY）" hint="连续输入 4 位。">
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              className="w-full rounded-xl border px-3 py-2 text-base"
-              placeholder="例如：1959"
-              value={spouseBirthYearText}
-              onChange={(e) => setSpouseBirthYearText(e.target.value.replace(/\D/g, "").slice(0, 4))}
-            />
-            <div className="text-xs text-gray-500 mt-2">
-              配偶年龄：{spouseAge > 0 ? `${spouseAge} 岁` : "（可选）"}
-            </div>
-          </Field>
-
-          <Field label="情景结构" hint="仅一人 1 段，或先后两人 2 段相加。">
-            <ChoicePills
-              value={scenarioType}
-              onChange={setScenarioType}
-              options={[
-                { label: "仅一人 1 段 LTC", value: "ONE" },
-                { label: "先后两人 2 段 LTC 相加", value: "TWO" },
-              ]}
-            />
-            <div className="text-xs text-gray-500 mt-2">
-              已选：{scenarioType === "ONE" ? "仅一人 1 段" : "先后两人 2 段相加"}
-            </div>
-          </Field>
-        </div>
-      ) : null}
-
-      <div className="grid md:grid-cols-3 gap-5 mt-6">
-        <Field label="情景起点年龄" hint="默认 85；应 ≥ 当前年龄。">
-          <NumberInput value={startAge} onChange={(v) => setStartAge(clamp(v, 40, 110))} min={40} max={110} />
-        </Field>
-
-        <Field label="护理持续年限（每段）" hint="默认 5 年。">
-          <NumberInput value={durationYears} onChange={(v) => setDurationYears(clamp(v, 1, 20))} min={1} max={20} />
-        </Field>
-
-        <Field label="高级选项开关" hint="用于框架先跑通（不引入外部数据）。">
-          <div className="text-xs text-gray-500">下方“间隔/通胀”会影响起点成本推演</div>
-        </Field>
-      </div>
-
-      <div className="grid md:grid-cols-3 gap-5 mt-5">
-        <Field label="两人发生间隔（年）" hint="仅在“两段”情景下有意义。">
-          <NumberInput value={spouseGapYears} onChange={(v) => setSpouseGapYears(clamp(v, 0, 25))} min={0} max={25} />
-        </Field>
-
-        <Field label="成本年化增长率（%）" hint="用于把“今天价格”推到“情景起点年龄”。">
-          <NumberInput value={costInflationPct} onChange={(v) => setCostInflationPct(clamp(v, 0, 12))} min={0} max={12} />
-        </Field>
-
-        <Field label="LTC 年度成本（按今天价格）" hint="工程假设：用于压力测试。">
-          {/* ✅ 这里就是你之前 push 后炸掉的地方：现在改成正确 JSX */}
-          <NumberInput
-            value={annualCostToday}
-            onChange={(v) => setAnnualCostToday(clamp(v, 50000, 600000))}
-            min={50000}
-            max={600000}
-            step={1000}
-          />
-          <div className="text-xs text-gray-500 mt-2">提示：这不是预测；你可以随时回来调整。</div>
-        </Field>
-      </div>
-
-      <div className="mt-6 rounded-2xl border p-4 bg-gray-50">
-        <div className="text-sm font-semibold mb-2">工程假设（自动计算）</div>
-        <div className="text-xs text-gray-700 leading-relaxed">
-          距离情景起点约 <b>{yearsToStart}</b> 年；按成本年化增长率 <b>{costInflationPct}%</b> 推演，
-          情景起点的年度成本约为：<b>{fmtUSD(inflatedAnnualCostAtStart)}</b>
-          <br />
-          （用于压力测试骨架：起点年度成本 × 年数）
         </div>
       </div>
 
-      <Nav step={step} setStep={setStep} canNext={currentAge > 0} />
+      <Nav step={step} setStep={setStep} canNext />
     </StepShell>
   );
 
-  const Screen3 = () => (
-    <StepShell title="哪些钱，真的能在压力时刻用上？" subtitle="账面资产 ≠ 可动用现金。我们只计算你愿意、也能够动用的部分。">
-      <div className="grid md:grid-cols-2 gap-5">
-        <Field label="当前可动用资产（现金池）" hint="例如：现金、可卖出的资产（你愿意卖）。">
-          <NumberInput value={currentPool} onChange={(v) => setCurrentPool(clamp(v, 0, 5e7))} min={0} max={5e7} />
-        </Field>
-
-        <Field label="每年可新增储蓄/投入" hint="例如：每年净结余可投入。">
-          <NumberInput
-            value={annualContribution}
-            onChange={(v) => setAnnualContribution(clamp(v, 0, 5e6))}
-            min={0}
-            max={5e6}
-          />
-        </Field>
-
-        <Field label="投入年数" hint="例如：10 年。">
-          <NumberInput value={contributionYears} onChange={(v) => setContributionYears(clamp(v, 0, 40))} min={0} max={40} />
-        </Field>
-
-        <Field label="净回报率（%）" hint="用于把投入折算到未来。">
+  const renderScreen4 = () => (
+    <StepShell
+      title="合同/福利：你希望“确定性覆盖”多少？"
+      subtitle="工程参数：若发生 LTC，每年可由合同/福利支付多少、持续多少年。"
+    >
+      <div className="space-y-4">
+        <Field label="是否已有 LTC 合同 / 福利来源？" hint="例如：LTC保单、雇主福利、年金/Life+LTC rider 等。">
           <ChoicePills
-            value={netReturnChoice}
-            onChange={setNetReturnChoice}
+            value={hasContract ? "YES" : "NO"}
+            onChange={(v) => setHasContract(v === "YES")}
             options={[
-              { label: "1%", value: "1.0" },
-              { label: "3%", value: "3.0" },
-              { label: "5%", value: "5.0" },
-              { label: "7%", value: "7.0" },
+              { value: "NO", label: "暂无" },
+              { value: "YES", label: "有" },
             ]}
           />
-          <div className="text-xs text-gray-500 mt-2">已选：{netReturnChoice}%</div>
-        </Field>
-      </div>
-
-      <div className="mt-6 rounded-2xl border p-4">
-        <div className="text-sm font-semibold mb-2">未来可动用资产（估算）</div>
-        <div className="text-sm">
-          未来价值（FV）≈ <b>{fmtUSD(fv)}</b>
-        </div>
-        <div className="text-xs text-gray-500 mt-2">说明：这是工程估算，用于对比不同方案，不代表投资建议。</div>
-      </div>
-
-      <Nav step={step} setStep={setStep} />
-    </StepShell>
-  );
-
-  const Screen4 = () => (
-    <StepShell title="合同/福利是否覆盖一部分？" subtitle="先用“年度给付 × 年数”的工程方式跑通。后续可引入更真实的条款/概率。">
-      <div className="grid md:grid-cols-2 gap-5">
-        <Field label="是否有 LTC 合同/福利" hint="例如：LTC 保险、年金附加给付等。">
-          <Toggle checked={hasContract} onChange={setHasContract} label={hasContract ? "有合同/福利" : "没有合同/福利"} />
         </Field>
 
         {hasContract ? (
-          <div className="grid gap-5">
-            <Field label="合同年度可给付" hint="例如：$138,000/年">
+          <div className="grid md:grid-cols-2 gap-5">
+            <Field label="合同/福利：每年可支付金额（起点年口径）" hint="默认不再自动通胀，避免重复。">
               <NumberInput
                 value={annualContractBenefit}
-                onChange={(v) => setAnnualContractBenefit(clamp(v, 0, 6e5))}
+                onChange={(v) => setAnnualContractBenefit(clamp(v, 0, 2000000))}
                 min={0}
-                max={6e5}
+                max={2000000}
               />
             </Field>
-            <Field label="给付年数" hint="例如：6 年">
-              <NumberInput value={contractBenefitYears} onChange={(v) => setContractBenefitYears(clamp(v, 0, 20))} min={0} max={20} />
+
+            <Field label="合同/福利可支付年数" hint="例如：6 年。">
+              <NumberInput
+                value={contractBenefitYears}
+                onChange={(v) => setContractBenefitYears(clamp(v, 0, 30))}
+                min={0}
+                max={30}
+              />
             </Field>
           </div>
-        ) : null}
+        ) : (
+          <div className="rounded-2xl border p-4 bg-gray-50 text-xs text-gray-700 leading-relaxed">
+            你选择“暂无合同/福利”。后续计算默认合同覆盖 = 0。
+          </div>
+        )}
       </div>
 
-      <Nav step={step} setStep={setStep} />
+      <Nav step={step} setStep={setStep} canNext />
     </StepShell>
   );
 
-  const Screen5 = () => (
+  const renderScreen5 = () => (
     <StepShell
-      title="你希望留多少“缓冲池”？"
-      subtitle="缓冲用于对抗不确定性（护理更久/费用更高/给付延迟等）。前面已推演通胀，因此这里不再重复通胀。"
+      title="缓冲系数（不含通胀）"
+      subtitle="通胀/护理成本增长已在 Screen 2 进入成本路径。这里缓冲只覆盖：升级、额外服务、摩擦等非通胀不确定性。"
     >
-      <div className="grid md:grid-cols-2 gap-5">
-        <Field label="缓冲比例（%）" hint="缓冲系数 = 缓冲比例。比如 18% 意味着在成本基础上再加 18%。">
-          <NumberInput value={techBufferPct} onChange={(v) => setTechBufferPct(clamp(v, 0, 50))} min={0} max={50} />
-        </Field>
+      <div className="grid md:grid-cols-2 gap-6">
+        <div className="space-y-4">
+          <Field label="缓冲比例（%）" hint="建议 0%–30%。不是通胀，是非通胀不确定性的保护垫。">
+            <NumberInput value={bufferPct} onChange={(v) => setBufferPct(clamp(v ?? 0, 0, 50))} min={0} max={50} />
+          </Field>
 
-        <div className="rounded-2xl border p-4 bg-gray-50">
-          <div className="text-sm font-semibold mb-2">当前测算摘要</div>
-          <div className="text-xs text-gray-700 leading-relaxed">
-            情景起点年度成本（推演后）：<b>{fmtUSD(inflatedAnnualCostAtStart)}</b>
-            <br />
-            总年数（按情景结构）：<b>{totalLtcYears}</b>
-            <br />
-            总成本（骨架）：<b>{fmtUSD(totalCostAtStart)}</b>
-            <br />
-            缓冲金额：<b>{fmtUSD(bufferAmount)}</b>
+          <div className="rounded-2xl border p-4 bg-gray-50">
+            <div className="text-sm font-semibold mb-1">关系</div>
+            <div className="text-xs text-gray-700 leading-relaxed">
+              缓冲倍数 = 1 + 缓冲比例 / 100 = <span className="font-semibold">{bufferMultiplier.toFixed(2)}x</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="rounded-2xl border p-4">
+            <div className="text-xs text-gray-600">情景起点年龄年度成本（已含通胀推算）</div>
+            <div className="text-lg font-semibold mt-1">{fmtUSD(annualCostAtStart)}</div>
+            <div className="text-xs text-gray-600 mt-2">
+              加入缓冲后（首年）≈{" "}
+              <span className="font-semibold">
+                {fmtUSD(Math.round((annualCostAtStart || 0) * bufferMultiplier))}
+              </span>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border p-4 bg-gray-50">
+            <div className="text-sm font-semibold mb-1">Plan C（占位）</div>
+            <div className="text-xs text-gray-600 mb-3">如后续需要，可用它模拟“成本降低”。</div>
+            <ChoicePills
+              value={planCOn ? "ON" : "OFF"}
+              onChange={(v) => setPlanCOn(v === "ON")}
+              options={[
+                { value: "OFF", label: "关闭" },
+                { value: "ON", label: "开启" },
+              ]}
+            />
+            {planCOn && (
+              <div className="mt-3">
+                <Field label="成本降低比例（%）" hint="例如居家照护优化、技术辅助等。">
+                  <NumberInput value={planCCostCutPct} onChange={(v) => setPlanCCostCutPct(clamp(v ?? 0, 0, 50))} min={0} max={50} />
+                </Field>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      <Nav step={step} setStep={setStep} />
+      <Nav step={step} setStep={setStep} canNext />
     </StepShell>
   );
 
-  const Screen6 = () => (
+  const renderScreen6 = () => (
     <StepShell
-      title="结果总览（v1）"
-      subtitle="这里先输出清晰的数值总览。Plan B / Plan C 目前只是示意开关（尚未绑定不同计算逻辑）。"
+      title="结果摘要（含年度棒图）"
+      subtitle="从情景开始后逐年展示：合同/福利、自付（缓冲池支付）、支付后剩余资产。"
     >
-      <div className="grid md:grid-cols-2 gap-5">
-        <div className="rounded-2xl border p-4">
-          <div className="text-sm font-semibold mb-2">情景成本（压力测试骨架）</div>
-          <div className="text-sm">总成本：<b>{fmtUSD(totalCostAtStart)}</b></div>
-          <div className="text-sm mt-1">缓冲池：<b>{fmtUSD(bufferAmount)}</b></div>
+      <div className="rounded-2xl border p-4 bg-gray-50 mb-5">
+        <div className="text-xs text-gray-600">
+          情景：{includeSpouse ? (ltcMode === "TWO" ? "夫妻先后两人（两段）" : "仅一人（单段）") : "仅本人（不含配偶）"}
+          {" · "}
+          成本增长率：{costGrowthPct}%{" · "}
+          缓冲比例：{bufferPct}%（{bufferMultiplier.toFixed(2)}x，非通胀）
         </div>
-
-        <div className="rounded-2xl border p-4">
-          <div className="text-sm font-semibold mb-2">可动用资金（工程估算）</div>
-          <div className="text-sm">未来可动用资产（FV）：<b>{fmtUSD(fv)}</b></div>
-          <div className="text-xs text-gray-500 mt-2">后续会把“每年序列/棒图/合同给付路径”加进来。</div>
+        <div className="text-xs text-gray-600 mt-1">
+          起点年龄年度成本：<span className="font-semibold">{fmtUSD(annualCostAtStart)}</span>
+          {includeSpouse && ltcMode === "TWO" ? <>；两人间隔 {spouseGapYears} 年</> : null}
         </div>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-5 mt-5">
-        <Field label="Plan B（示意开关）" hint="当前仅用于 UI；后续会绑定不同策略/合同结构。">
-          <Toggle checked={planBOn} onChange={setPlanBOn} label={planBOn ? "Plan B 已开启" : "Plan B 未开启"} />
-        </Field>
-        <Field label="Plan C（示意开关）" hint="当前仅用于 UI；后续会绑定不同策略/合同结构。">
-          <Toggle checked={planCOn} onChange={setPlanCOn} label={planCOn ? "Plan C 已开启" : "Plan C 未开启"} />
-        </Field>
+      {/* ✅ 棒图：你说之前没看到，这里强制放在表格之前 */}
+      <div className="rounded-2xl border p-4 mb-6">
+        <div className="text-sm font-semibold mb-2">年度棒图（合同/自付/剩余资产）</div>
+        <div className="text-xs text-gray-600 mb-4">蓝=合同，红=自付，绿=支付后剩余资产（按最大值归一）</div>
+
+        {timeline.length === 0 ? (
+          <div className="text-xs text-gray-600">（当前情景年数为 0，无法绘制）</div>
+        ) : (
+          <div className="space-y-3">
+            {timeline.map((r) => (
+              <BarRow
+                key={r.yearIndex}
+                label={`第 ${r.yearIndex} 年`}
+                contract={r.contract}
+                oop={r.oop}
+                remain={Math.max(0, r.startAssets - r.oop)}
+                maxValue={chartMax}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* 最后一页：不再显示“下一步”按钮（避免“无功能下一步”） */}
-      <Nav step={step} setStep={setStep} canNext={false} nextLabel="已是最后一步" />
+      {/* 表格核对 */}
+      <div className="rounded-2xl border p-4">
+        <div className="text-sm font-semibold mb-3">年度明细（核对用）</div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-gray-600">
+                <th className="text-left py-2 pr-3">年</th>
+                <th className="text-right py-2 px-2">期初资产</th>
+                <th className="text-right py-2 px-2">LTC成本</th>
+                <th className="text-right py-2 px-2">合同</th>
+                <th className="text-right py-2 px-2">自付</th>
+                <th className="text-right py-2 pl-2">期末资产</th>
+              </tr>
+            </thead>
+            <tbody>
+              {timeline.map((r) => (
+                <tr key={r.yearIndex} className="border-t">
+                  <td className="py-2 pr-3">第 {r.yearIndex} 年</td>
+                  <td className="py-2 px-2 text-right tabular-nums">{fmtUSD(r.startAssets)}</td>
+                  <td className="py-2 px-2 text-right tabular-nums">{fmtUSD(r.ltcCost)}</td>
+                  <td className="py-2 px-2 text-right tabular-nums">{fmtUSD(r.contract)}</td>
+                  <td className="py-2 px-2 text-right tabular-nums">{fmtUSD(r.oop)}</td>
+                  <td className="py-2 pl-2 text-right tabular-nums">{fmtUSD(r.endAssets)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 最后一页不提供“下一步” */}
+      <div className="flex justify-end mt-8">
+        <button className="px-4 py-2 rounded-lg border hover:bg-gray-50" onClick={() => setStep(1)} type="button">
+          回到第 1 步重新测试
+        </button>
+      </div>
     </StepShell>
   );
 
-  if (step === 1) return <Screen1 />;
-  if (step === 2) return <Screen2 />;
-  if (step === 3) return <Screen3 />;
-  if (step === 4) return <Screen4 />;
-  if (step === 5) return <Screen5 />;
-  return <Screen6 />;
+  /* ======================
+     主渲染
+====================== */
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {step === 1 && renderScreen1()}
+      {step === 2 && renderScreen2()}
+      {step === 3 && renderScreen3()}
+      {step === 4 && renderScreen4()}
+      {step === 5 && renderScreen5()}
+      {step === 6 && renderScreen6()}
+    </div>
+  );
 }
