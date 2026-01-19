@@ -145,7 +145,11 @@ const Nav = ({ step, setStep, canNext = true }) => (
 
 // ✅ Screen6 棒图行（固定放在 App 外，避免组件被重建）
 const BarRow = ({ label, contract, oop, remain, maxValue }) => {
-  const toPct = (x) => `${(100 * (x / maxValue)).toFixed(2)}%`;
+  const toPct = (x) => {
+    if (!maxValue || !Number.isFinite(x) || x <= 0) return "0%";
+    return `${(100 * (x / maxValue)).toFixed(2)}%`;
+  };
+
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-xs text-gray-600">
